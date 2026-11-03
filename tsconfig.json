@@ -11,14 +11,7 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": [
-      "node",
-      "bun"
-    ]
+    "types": ["node", "bun"]
   },
-  "include": [
-    "skill/scripts/**/*.ts",
-    "skill/modules/*/templates/**/*.ts",
-    "tests/**/*.ts"
-  ]
+  "include": ["skill/scripts/**/*.ts", "skill/modules/*/templates/**/*.ts", "tests/**/*.ts"]
 }

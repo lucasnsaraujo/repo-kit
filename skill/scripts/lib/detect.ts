@@ -88,6 +88,12 @@ function detectNodeVersion(root: string, pkg: PackageJson | null): string {
   return engine ?? "24";
 }
 
+/** The supply-chain module writes settings into pnpm-workspace.yaml, so only a `packages:` key means workspaces. */
+function declaresPnpmPackages(root: string): boolean {
+  const path = join(root, "pnpm-workspace.yaml");
+  return existsSync(path) && /^packages:/m.test(readFileSync(path, "utf8"));
+}
+
 export function detect(root: string): Detection {
   const pkg = readPackageJson(root);
   const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
@@ -100,7 +106,7 @@ export function detect(root: string): Detection {
   return {
     root,
     packageManager: detectPackageManager(root, pkg),
-    monorepo: Boolean(pkg?.workspaces) || exists("pnpm-workspace.yaml"),
+    monorepo: Boolean(pkg?.workspaces) || declaresPnpmPackages(root),
     defaultBranch: detectDefaultBranch(root),
     nodeVersion: detectNodeVersion(root, pkg),
     githubRemote: (git(root, ["remote", "get-url", "origin"]) ?? "").includes("github.com"),

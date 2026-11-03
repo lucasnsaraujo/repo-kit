@@ -10,7 +10,7 @@
     "lint:workflows": "actionlint skill/modules/*/templates/.github/workflows/*.yml"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
+    "@biomejs/biome": "2.6.4",
     "@types/bun": "1.4.4",
     "@types/node": "24.19.2",
     "typescript": "7.0.2"
