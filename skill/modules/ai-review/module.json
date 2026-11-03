@@ -1,0 +1,19 @@
+{
+  "id": "ai-review",
+  "summary": "Claude Code reviews every pull request with the owner's subscription, comments P0-P3 findings and gates merge on P0/P1.",
+  "requires": [],
+  "files": [
+    { "path": ".github/workflows/ai-review.yml" },
+    { "path": ".github/ai-review/prompt.md" },
+    { "path": ".github/ai-review/schema.json" },
+    { "path": ".github/ai-review/rules/tests.md" },
+    { "path": ".github/ai-review/rules/security.md" },
+    { "path": ".github/ai-review/rules/migrations.md" },
+    { "path": ".github/ai-review/package.json" },
+    { "path": ".github/ai-review/state.ts" },
+    { "path": ".github/ai-review/github.ts" },
+    { "path": ".github/ai-review/collect.ts" },
+    { "path": ".github/ai-review/compose-prompt.ts" },
+    { "path": ".github/ai-review/publish.ts" }
+  ]
+}

@@ -1,0 +1,277 @@
+name: AI review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  # A comment containing `/ai-review` from someone who can merge asks for a recheck, so an author
+  # can argue a finding away instead of changing correct code to satisfy it.
+  issue_comment:
+    types: [created]
+
+# A comment run gets a group of its own: in a shared group any comment, even an unauthorized one,
+# would cancel or evict the review in progress. Push runs share one group per pull request, where
+# cancelling the review of a superseded commit is the point.
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name == 'issue_comment' && github.run_id || 'push' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+env:
+  MODEL: ${{ vars.AI_REVIEW_MODEL || 'claude-opus-5-5' }}
+  EFFORT: ${{ vars.AI_REVIEW_EFFORT || 'high' }}
+
+jobs:
+  authorize:
+    # Push runs: same-repository, non-draft pull requests only. A fork's `pull_request` run gets
+    # neither secrets nor a write token. Comment runs: a pull request comment with `/ai-review`;
+    # the association is a cheap pre-filter, the permission lookup below is the real check.
+    if: >-
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.pull_request.draft == false) ||
+      (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        contains(github.event.comment.body, '/ai-review') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      base_sha: ${{ steps.pr.outputs.base_sha }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      same_repo: ${{ steps.pr.outputs.same_repo }}
+    steps:
+      - name: Check that the commenter can merge
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          # Fails closed. `maintain` reports `write` and `triage` reports `read`, so admin and
+          # write are exactly the roles that can merge.
+          if ! permission=$(gh api "repos/${GITHUB_REPOSITORY}/collaborators/${COMMENTER}/permission" --jq .permission); then
+            echo "::error title=AI review refused::Could not read the permission of @${COMMENTER}."
+            exit 1
+          fi
+          case "$permission" in
+            admin | write) echo "@${COMMENTER} has ${permission} access." ;;
+            *)
+              echo "::error title=AI review refused::@${COMMENTER} has ${permission:-no} access. Only someone who can merge can ask for a review."
+              exit 1
+              ;;
+          esac
+
+      - name: Resolve the pull request commits
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          # Empty on comment runs, whose payload has no pull request; the API answers instead.
+          # A push run keeps the commits it was triggered for: the API may already report a newer push.
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          IFS=$'\t' read -r api_base api_head head_repo < <(
+            gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '[.base.sha, .head.sha, (.head.repo.full_name // "")] | @tsv'
+          )
+          base_sha=${EVENT_BASE_SHA:-$api_base}
+          head_sha=${EVENT_HEAD_SHA:-$api_head}
+          for sha in "$base_sha" "$head_sha"; do
+            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error title=AI review could not resolve the pull request::Unexpected commit id '${sha}'."
+              exit 1
+            fi
+          done
+          same_repo=false
+          if [ "$head_repo" = "$GITHUB_REPOSITORY" ]; then same_repo=true; fi
+          {
+            echo "pr_number=${PR_NUMBER}"
+            echo "base_sha=${base_sha}"
+            echo "head_sha=${head_sha}"
+            echo "same_repo=${same_repo}"
+          } >> "$GITHUB_OUTPUT"
+
+  review:
+    needs: authorize
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # No write access: this job runs a model over untrusted code. publish.ts posts the result.
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      PR_NUMBER: ${{ needs.authorize.outputs.pr_number }}
+      BASE_SHA: ${{ needs.authorize.outputs.base_sha }}
+      HEAD_SHA: ${{ needs.authorize.outputs.head_sha }}
+      SAME_REPO: ${{ needs.authorize.outputs.same_repo }}
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      # Before the checkout, so no `.npmrc` from the pull request can redirect the install.
+      - name: Install Claude Code
+        run: npm install --global @anthropic-ai/claude-code@2.1.301
+
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/pull/${{ needs.authorize.outputs.pr_number }}/head
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Pin the reviewed commit
+        run: |
+          set -euo pipefail
+          for sha in "$BASE_SHA" "$HEAD_SHA"; do
+            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "::error title=AI review could not reach the commits::${sha} is not in the checkout. Push again or resolve the merge conflict."
+              exit 1
+            fi
+          done
+          git checkout --quiet --detach "$HEAD_SHA"
+
+      # The scripts, prompt, schema and rules come from the base commit, so a pull request cannot
+      # rewrite the instructions or the code that reviews it. Only the pull request that installs
+      # the kit has no base copy; it may use its own copy when it comes from this repository.
+      - name: Take the review kit from the base commit
+        run: |
+          set -euo pipefail
+          kit="$RUNNER_TEMP/ai-review-kit"
+          mkdir -p "$kit" "$RUNNER_TEMP/ai-review-out"
+          if git cat-file -e "${BASE_SHA}:.github/ai-review/compose-prompt.ts" 2>/dev/null; then
+            # `git show` per file rather than `git archive`, which skips paths marked `export-ignore`.
+            git ls-tree -r --name-only "$BASE_SHA" -- .github/ai-review | while IFS= read -r path; do
+              target="$kit/${path#.github/ai-review/}"
+              mkdir -p "$(dirname "$target")"
+              git show "${BASE_SHA}:${path}" > "$target"
+            done
+          elif [ "$SAME_REPO" = true ]; then
+            echo "::notice title=AI review kit taken from the pull request::The base commit has no .github/ai-review yet."
+            cp -R .github/ai-review/. "$kit"
+          else
+            echo "::error title=AI review kit missing::The base commit has no .github/ai-review, and a fork's own copy is not trusted."
+            exit 1
+          fi
+          echo "AI_REVIEW_KIT=$kit" >> "$GITHUB_ENV"
+          echo "AI_REVIEW_OUT=$RUNNER_TEMP/ai-review-out" >> "$GITHUB_ENV"
+
+      - name: Load the previous review and author responses
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TRIGGER_COMMENT_ID: ${{ github.event.comment.id }}
+        run: node "$AI_REVIEW_KIT/collect.ts" --out "$RUNNER_TEMP/ai-review-context.json"
+
+      - name: Compose the prompt
+        run: >-
+          node "$AI_REVIEW_KIT/compose-prompt.ts"
+          --base "$BASE_SHA" --head "$HEAD_SHA"
+          --context "$RUNNER_TEMP/ai-review-context.json"
+          --out "$AI_REVIEW_OUT"
+
+      # Claude Code runs inside the pull request's checkout, so nothing there may configure it:
+      # `--setting-sources user` skips the project's settings and hooks, `--strict-mcp-config` loads
+      # no MCP server. The tools only read; in `dontAsk` mode every Bash command outside the allow
+      # list is refused, and the deny rules close the git options that write or read outside the repo.
+      - name: Review
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+        run: |
+          set +e
+          timeout 900 claude --print \
+            --model "$MODEL" \
+            --effort "$EFFORT" \
+            --output-format json \
+            --json-schema "$(cat "$AI_REVIEW_KIT/schema.json")" \
+            --append-system-prompt-file "$AI_REVIEW_OUT/system-prompt.md" \
+            --no-session-persistence \
+            --strict-mcp-config \
+            --setting-sources user \
+            --permission-mode dontAsk \
+            --tools Read,Grep,Glob,Bash \
+            --allowedTools 'Bash(git diff:*)' 'Bash(git show:*)' 'Bash(git log:*)' 'Bash(git ls-files:*)' \
+            --disallowedTools 'Bash(*--output*)' 'Bash(*--no-index*)' 'Bash(*--ext-diff*)' \
+            < "$AI_REVIEW_OUT/user-message.md" > "$AI_REVIEW_OUT/result.json"
+          exit_code=$?
+          echo "$exit_code" > "$AI_REVIEW_OUT/exit-code"
+          echo "Claude Code exited with ${exit_code}."
+
+      - name: Upload the review
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ai-review
+          path: ${{ runner.temp }}/ai-review-out
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    needs: [authorize, review]
+    # Runs when the review failed too, so a failure is reported; skipped when a newer push cancelled the run.
+    if: ${{ !cancelled() && needs.authorize.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    env:
+      PR_NUMBER: ${{ needs.authorize.outputs.pr_number }}
+      HEAD_SHA: ${{ needs.authorize.outputs.head_sha }}
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      # Only the kit, and only from the base commit: this job holds a write token.
+      - name: Check out the review kit from the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.authorize.outputs.base_sha }}
+          path: base
+          sparse-checkout: .github/ai-review
+          persist-credentials: false
+
+      - name: Find the review kit
+        id: kit
+        run: |
+          if [ -f base/.github/ai-review/publish.ts ]; then
+            echo "dir=base/.github/ai-review" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=head/.github/ai-review" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The pull request that installs the kit, from this repository only (see the review job).
+      - name: Check out the review kit from the pull request
+        if: steps.kit.outputs.dir == 'head/.github/ai-review' && needs.authorize.outputs.same_repo == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.authorize.outputs.head_sha }}
+          path: head
+          sparse-checkout: .github/ai-review
+          persist-credentials: false
+
+      - name: Download the review
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ai-review
+          path: ${{ runner.temp }}/ai-review-out
+
+      - name: Publish the comment and the commit status
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          KIT_DIR: ${{ steps.kit.outputs.dir }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          AI_REVIEW_GATE: ${{ vars.AI_REVIEW_GATE }}
+          REVIEW_JOB_RESULT: ${{ needs.review.result }}
+        run: node "$KIT_DIR/publish.ts" --dir "$RUNNER_TEMP/ai-review-out"

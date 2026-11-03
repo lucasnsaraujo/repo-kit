@@ -1,0 +1,56 @@
+{
+  "title": "AI review result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "findings"],
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One sentence: whether actionable findings exist and the most serious one."
+    },
+    "findings": {
+      "type": "array",
+      "description": "Every previous active finding exactly once (REMAINS, RESOLVED or WITHDRAWN), then new findings (NEW). Order by priority, P0 first.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "priority", "title", "file", "line", "body"],
+        "properties": {
+          "status": {
+            "enum": ["NEW", "REMAINS", "RESOLVED", "WITHDRAWN"],
+            "description": "NEW for a finding not in the previous review. REMAINS, RESOLVED or WITHDRAWN for each previous active finding."
+          },
+          "priority": {
+            "enum": ["P0", "P1", "P2", "P3"]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Short title. For a previous finding, copy its title exactly."
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Repository-relative path of the changed file. For a previous finding, copy its file exactly."
+          },
+          "line": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "description": "Line in the head commit, or null when the finding has no single line."
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "description": "At most 80 words: evidence, impact, smallest fix."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required for RESOLVED (what changed) and WITHDRAWN (the verified reason and the line that proves it). Omit for NEW and REMAINS."
+          }
+        }
+      }
+    }
+  }
+}
