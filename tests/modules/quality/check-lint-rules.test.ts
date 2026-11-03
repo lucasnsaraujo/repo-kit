@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { flaggedLines, judgeRule, markedLines } from "../../../skill/modules/quality/templates/scripts/check-lint-rules.mts";
+import { flaggedLines, judgeRule, markedLines } from "../../../skills/repo-kit/modules/quality/templates/scripts/check-lint-rules.mts";
 import { applyModules, removeTempDirs, writeFiles } from "../../helpers/render-module.ts";
 
 afterEach(removeTempDirs);

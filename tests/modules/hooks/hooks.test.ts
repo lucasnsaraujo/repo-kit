@@ -2,9 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { buildVars } from "../../../skill/scripts/lib/apply.ts";
-import { detect } from "../../../skill/scripts/lib/detect.ts";
-import { renderTemplate } from "../../../skill/scripts/lib/render.ts";
+import { buildVars } from "../../../skills/repo-kit/scripts/lib/apply.ts";
+import { detect } from "../../../skills/repo-kit/scripts/lib/detect.ts";
+import { renderTemplate } from "../../../skills/repo-kit/scripts/lib/render.ts";
 import { applyModules, REPO_ROOT, removeTempDirs, tempDir, writeFiles } from "../../helpers/render-module.ts";
 
 afterEach(removeTempDirs);
@@ -18,7 +18,7 @@ describe("rendered hooks", () => {
       const vars = buildVars(detect(project), ["quality", "hooks", "tests", "supply-chain"]);
       for (const hook of HOOKS) {
         expect(statSync(join(project, hook)).mode & 0o111).not.toBe(0);
-        const full = renderTemplate(readFileSync(join(REPO_ROOT, "skill/modules/hooks/templates", hook), "utf8"), vars);
+        const full = renderTemplate(readFileSync(join(REPO_ROOT, "skills/repo-kit/modules/hooks/templates", hook), "utf8"), vars);
         for (const source of [readFileSync(join(project, hook), "utf8"), full]) {
           expect(spawnSync("sh", ["-n"], { input: source, encoding: "utf8" }).stderr).toBe("");
         }

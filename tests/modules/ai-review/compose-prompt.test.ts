@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { ReviewContext } from "../../../skill/modules/ai-review/templates/.github/ai-review/collect.ts";
+import type { ReviewContext } from "../../../skills/repo-kit/modules/ai-review/templates/.github/ai-review/collect.ts";
 import {
   agentDocPaths,
   capSections,
@@ -13,8 +13,8 @@ import {
   matchesGlob,
   parseRule,
   selectRules,
-} from "../../../skill/modules/ai-review/templates/.github/ai-review/compose-prompt.ts";
-import type { ReviewState } from "../../../skill/modules/ai-review/templates/.github/ai-review/state.ts";
+} from "../../../skills/repo-kit/modules/ai-review/templates/.github/ai-review/compose-prompt.ts";
+import type { ReviewState } from "../../../skills/repo-kit/modules/ai-review/templates/.github/ai-review/state.ts";
 
 const temps: string[] = [];
 afterEach(() => {
@@ -59,7 +59,7 @@ describe("domain rules", () => {
   });
 
   test("every shipped rule parses and applies to the files it is written for", () => {
-    const directory = join(import.meta.dir, "../../../skill/modules/ai-review/templates/.github/ai-review/rules");
+    const directory = join(import.meta.dir, "../../../skills/repo-kit/modules/ai-review/templates/.github/ai-review/rules");
     const shipped = readdirSync(directory).map((name) => parseRule(name, readFileSync(join(directory, name), "utf8")));
     const pick = (file: string) => selectRules(shipped, [file]).map((rule) => rule.path);
     expect(pick("src/user.test.ts")).toEqual(["tests.md"]);

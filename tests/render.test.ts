@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { renderTemplate } from "../skill/scripts/lib/render.ts";
+import { renderTemplate } from "../skills/repo-kit/scripts/lib/render.ts";
 
 const vars = { pm: "bun", pmRun: "bun run", bun: true, pnpm: false, "module:quality": true };
 

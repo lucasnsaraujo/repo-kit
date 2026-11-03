@@ -1,0 +1,17 @@
+{
+  "name": "repo-kit",
+  "owner": {
+    "name": "Lucas Araujo",
+    "url": "https://github.com/lucasnsaraujo"
+  },
+  "description": "repo-kit: a standard dev workflow for TypeScript repos, applied by Claude Code.",
+  "plugins": [
+    {
+      "name": "repo-kit",
+      "source": "./",
+      "description": "Set up a TypeScript repo's dev workflow from selectable modules: CI, Claude Code PR review, tests, hooks, env, supply chain, changelog, agent docs and loops.",
+      "category": "engineering",
+      "keywords": ["ci", "code-review", "github-actions", "scaffolding"]
+    }
+  ]
+}

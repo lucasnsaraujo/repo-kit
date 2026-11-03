@@ -1,9 +1,9 @@
 import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { execute, plan } from "../../skill/scripts/lib/apply.ts";
-import { detect } from "../../skill/scripts/lib/detect.ts";
-import { loadModules } from "../../skill/scripts/lib/modules.ts";
+import { execute, plan } from "../../skills/repo-kit/scripts/lib/apply.ts";
+import { detect } from "../../skills/repo-kit/scripts/lib/detect.ts";
+import { loadModules } from "../../skills/repo-kit/scripts/lib/modules.ts";
 
 export const REPO_ROOT = resolve(import.meta.dirname, "../..");
 
@@ -39,7 +39,8 @@ export function applyModules(input: {
     JSON.stringify({ name: "demo", private: true, type: "module", ...input.packageJson }, null, 2),
   );
   const modulesDir = tempDir("repo-kit-modules-");
-  for (const id of input.copy ?? input.modules) cpSync(join(REPO_ROOT, "skill/modules", id), join(modulesDir, id), { recursive: true });
+  for (const id of input.copy ?? input.modules)
+    cpSync(join(REPO_ROOT, "skills/repo-kit/modules", id), join(modulesDir, id), { recursive: true });
   const result = plan({ root: project, detection: detect(project), modules: loadModules(modulesDir), requested: input.modules });
   execute(project, result);
   if (input.linkNodeModules) symlinkSync(join(REPO_ROOT, "node_modules"), join(project, "node_modules"));

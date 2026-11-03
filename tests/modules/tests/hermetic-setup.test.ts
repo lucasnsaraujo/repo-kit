@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { isolateHome, scrubSecretEnv, startHermeticRun } from "../../../skill/modules/tests/templates/tools/vitest/hermetic-setup.ts";
+import {
+  isolateHome,
+  scrubSecretEnv,
+  startHermeticRun,
+} from "../../../skills/repo-kit/modules/tests/templates/tools/vitest/hermetic-setup.ts";
 import { removeTempDirs, tempDir } from "../../helpers/render-module.ts";
 
 afterEach(removeTempDirs);

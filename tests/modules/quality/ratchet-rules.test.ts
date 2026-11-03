@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { type Counts, type Ratchet, runRatchet } from "../../../skill/modules/quality/templates/scripts/type-ratchet.mts";
+import { type Counts, type Ratchet, runRatchet } from "../../../skills/repo-kit/modules/quality/templates/scripts/type-ratchet.mts";
 import { removeTempDirs, tempDir } from "../../helpers/render-module.ts";
 
 afterEach(removeTempDirs);

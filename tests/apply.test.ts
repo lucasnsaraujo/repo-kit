@@ -2,9 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { adopt, check, execute, NEW_SUFFIX, plan, readLock, remove } from "../skill/scripts/lib/apply.ts";
-import { detect } from "../skill/scripts/lib/detect.ts";
-import { loadModules } from "../skill/scripts/lib/modules.ts";
+import { adopt, check, execute, NEW_SUFFIX, plan, readLock, remove } from "../skills/repo-kit/scripts/lib/apply.ts";
+import { detect } from "../skills/repo-kit/scripts/lib/detect.ts";
+import { loadModules } from "../skills/repo-kit/scripts/lib/modules.ts";
 
 const temps: string[] = [];
 afterEach(() => {

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { countErrorsByFile, pendingOptions } from "../../../skill/modules/quality/templates/scripts/type-ratchet.mts";
+import { countErrorsByFile, pendingOptions } from "../../../skills/repo-kit/modules/quality/templates/scripts/type-ratchet.mts";
 import { applyModules, removeTempDirs, writeFiles } from "../../helpers/render-module.ts";
 
 afterEach(removeTempDirs);

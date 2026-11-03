@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { detect } from "../skill/scripts/lib/detect.ts";
+import { detect } from "../skills/repo-kit/scripts/lib/detect.ts";
 
 const temps: string[] = [];
 afterEach(() => {

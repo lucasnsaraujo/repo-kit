@@ -57,14 +57,8 @@
   "lines": [
     {
       "path": ".gitignore",
-      "lines": [
-        "node_modules/"
-      ]
+      "lines": ["node_modules/"]
     }
   ],
-  "devDependencies": [
-    "@biomejs/biome",
-    "knip",
-    "typescript"
-  ]
+  "devDependencies": ["@biomejs/biome", "knip", "typescript"]
 }

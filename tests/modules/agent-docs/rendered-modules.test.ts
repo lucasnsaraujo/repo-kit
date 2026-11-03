@@ -3,11 +3,11 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { execute, plan } from "../../../skill/scripts/lib/apply.ts";
-import { detect } from "../../../skill/scripts/lib/detect.ts";
-import { type LoadedModule, loadModules } from "../../../skill/scripts/lib/modules.ts";
+import { execute, plan } from "../../../skills/repo-kit/scripts/lib/apply.ts";
+import { detect } from "../../../skills/repo-kit/scripts/lib/detect.ts";
+import { type LoadedModule, loadModules } from "../../../skills/repo-kit/scripts/lib/modules.ts";
 
-const MODULES_DIR = resolve(import.meta.dirname, "../../../skill/modules");
+const MODULES_DIR = resolve(import.meta.dirname, "../../../skills/repo-kit/modules");
 const OWN_MODULES = ["agent-docs", "agent-loops", "env", "supply-chain", "changelog"];
 
 const temps: string[] = [];

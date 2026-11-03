@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { GitHubClient } from "../../../skill/modules/ai-review/templates/.github/ai-review/github.ts";
+import type { GitHubClient } from "../../../skills/repo-kit/modules/ai-review/templates/.github/ai-review/github.ts";
 import {
   decideStatus,
   mergeState,
@@ -10,14 +10,14 @@ import {
   readReviewResult,
   renderFailureComment,
   renderReviewComment,
-} from "../../../skill/modules/ai-review/templates/.github/ai-review/publish.ts";
+} from "../../../skills/repo-kit/modules/ai-review/templates/.github/ai-review/publish.ts";
 import {
   type Finding,
   type ReviewMeta,
   type ReviewState,
   readStateMarker,
   type StoredFinding,
-} from "../../../skill/modules/ai-review/templates/.github/ai-review/state.ts";
+} from "../../../skills/repo-kit/modules/ai-review/templates/.github/ai-review/state.ts";
 
 const temps: string[] = [];
 afterEach(() => {
