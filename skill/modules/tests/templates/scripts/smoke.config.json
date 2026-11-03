@@ -1,0 +1,10 @@
+{
+  "start": "{%pmRun%} start",
+  "env": { "PORT": "4310" },
+  "healthUrl": "http://127.0.0.1:4310/health",
+  "startTimeoutMs": 60000,
+  "checks": [
+    { "name": "health endpoint answers", "url": "http://127.0.0.1:4310/health", "status": 200 },
+    { "name": "home page renders", "url": "http://127.0.0.1:4310/", "status": 200, "bodyIncludes": "<html" }
+  ]
+}

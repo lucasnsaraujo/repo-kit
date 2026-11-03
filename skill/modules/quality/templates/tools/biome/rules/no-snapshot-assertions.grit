@@ -1,0 +1,14 @@
+language js(typescript)
+
+// A snapshot passes whatever the code printed the first time it ran, and a reviewer
+// accepts the next diff without reading it. Assert the values a caller relies on.
+`$subject.$matcher($...)` as $assertion where {
+  $matcher <: or {
+    `toMatchSnapshot`,
+    `toMatchInlineSnapshot`,
+    `toThrowErrorMatchingSnapshot`,
+    `toThrowErrorMatchingInlineSnapshot`,
+    `toMatchFileSnapshot`
+  },
+  register_diagnostic(span=$assertion, message="Assert the specific values the caller depends on instead of a snapshot: a snapshot records whatever the code printed once and gets re-accepted without review.", severity="error")
+}

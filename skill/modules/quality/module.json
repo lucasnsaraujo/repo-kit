@@ -1,0 +1,67 @@
+{
+  "id": "quality",
+  "summary": "Biome lint and format with anti-slop test rules, knip, and a strict-TypeScript ratchet.",
+  "files": [
+    {
+      "path": "biome.json"
+    },
+    {
+      "path": "knip.json"
+    },
+    {
+      "path": "scripts/check-lint-rules.ts"
+    },
+    {
+      "path": "scripts/debt-ratchet.ts"
+    },
+    {
+      "path": "scripts/type-ratchet.ts"
+    },
+    {
+      "path": "tools/biome/rules/no-snapshot-assertions.grit"
+    },
+    {
+      "path": "tools/biome/rules/no-test-id-queries.grit"
+    },
+    {
+      "path": "tools/biome/rules/no-sleep-in-tests.grit"
+    },
+    {
+      "path": "tools/biome/rules/no-module-mocking.grit"
+    },
+    {
+      "path": "tools/biome/rules/no-class-style-assertions.grit"
+    },
+    {
+      "path": "tools/biome/fixtures/no-snapshot-assertions.ts"
+    },
+    {
+      "path": "tools/biome/fixtures/no-test-id-queries.ts"
+    },
+    {
+      "path": "tools/biome/fixtures/no-sleep-in-tests.ts"
+    },
+    {
+      "path": "tools/biome/fixtures/no-module-mocking.ts"
+    },
+    {
+      "path": "tools/biome/fixtures/no-class-style-assertions.ts"
+    }
+  ],
+  "packageScripts": {
+    "lint": "biome check --max-diagnostics=none .",
+    "lint:fix": "biome check --write .",
+    "check:staged": "biome check --write --staged --files-ignore-unknown=true --no-errors-on-unmatched",
+    "typecheck": "tsc --noEmit",
+    "knip": "knip",
+    "types:ratchet": "node scripts/type-ratchet.ts",
+    "check:lint-rules": "node scripts/check-lint-rules.ts"
+  },
+  "lines": [
+    {
+      "path": ".gitignore",
+      "lines": ["node_modules/"]
+    }
+  ],
+  "devDependencies": ["@biomejs/biome", "knip", "typescript"]
+}

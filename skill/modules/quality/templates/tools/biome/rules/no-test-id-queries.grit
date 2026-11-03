@@ -1,0 +1,10 @@
+language js(typescript)
+
+// Users find elements by role, label and text. A test id is invisible to them, so a test
+// that queries one keeps passing after the button loses its label.
+or {
+  `$callee($...)` where { $callee <: r"(?:[\w$.]+\.)?(?:get|query|find)(?:All)?ByTestId" },
+  `$callee($selector)` where { $selector <: r"[\"'`].*data-testid.*[\"'`]" }
+} as $query where {
+  register_diagnostic(span=$query, message="Query the element the way a user finds it (getByRole, getByLabelText, getByText): a test id stays green after the visible label or role breaks.", severity="error")
+}

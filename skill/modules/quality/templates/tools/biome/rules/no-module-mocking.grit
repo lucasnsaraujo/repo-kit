@@ -1,0 +1,14 @@
+language js(typescript)
+
+// Replacing a module tests the mock's wiring, and the test keeps passing when the real
+// module's contract changes. Pass a fake through a parameter instead.
+or {
+  `vi.mock($...)`,
+  `vi.doMock($...)`,
+  `jest.mock($...)`,
+  `jest.doMock($...)`,
+  `jest.unstable_mockModule($...)`,
+  `mock.module($...)`
+} as $mocking where {
+  register_diagnostic(span=$mocking, message="Pass a fake or an in-memory implementation through a parameter instead of replacing the module: a module mock keeps passing after the real module's contract changes.", severity="error")
+}

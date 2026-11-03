@@ -1,0 +1,59 @@
+#!/bin/sh
+# The fast local gate: formats and lints what you staged, then typechecks when code or config
+# changed. CI runs the full suite on every pull request.
+set -eu
+
+cd "$(git rev-parse --show-toplevel)"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR >"$work/staged"
+git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMRD >"$work/changed"
+git -c core.quotePath=false diff --name-only >"$work/unstaged"
+# A partly staged file has edits in the index and other edits only in the working tree.
+grep -Fx -f "$work/unstaged" "$work/staged" >"$work/partly" || true
+
+fingerprint_partly_staged() {
+  while IFS= read -r path; do
+    printf '%s %s\n' "$(git hash-object -- "$path" 2>/dev/null || echo gone)" "$path"
+  done <"$work/partly"
+}
+
+if [ -s "$work/staged" ]; then
+  fingerprint_partly_staged >"$work/before"
+  echo "pre-commit: formatting and linting staged files"
+  {%pmRun%} check:staged
+
+  # The fixer edits the working tree. Staging a fully staged file again picks up only its fixes;
+  # staging a partly staged one would also commit edits you left out, so that stops the commit.
+  while IFS= read -r path; do
+    if ! grep -Fxq -- "$path" "$work/partly" && [ -e "$path" ]; then
+      git add -- "$path"
+    fi
+  done <"$work/staged"
+
+  fingerprint_partly_staged >"$work/after"
+  if ! cmp -s "$work/before" "$work/after"; then
+    echo "pre-commit: the fixer changed files that also have unstaged edits:" >&2
+    grep -Fxv -f "$work/before" "$work/after" | cut -d' ' -f2- | sed 's/^/  /' >&2
+    echo "Stage the fixes you want (git add -p), then commit again." >&2
+    exit 1
+  fi
+fi
+
+if grep -Eq '\.(ts|tsx|mts|cts)$|(^|/)(tsconfig[^/]*\.json|package\.json)$' "$work/changed"; then
+  echo "pre-commit: typechecking"
+  {%pmRun%} typecheck
+fi
+
+if grep -Eq '(^|/)package\.json$|^(bun\.lock|pnpm-lock\.yaml)$' "$work/changed"; then
+  echo "pre-commit: checking for unused dependencies and exports"
+  {%pmRun%} knip
+fi
+{%if module:supply-chain%}
+
+if command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: scanning staged changes for secrets"
+  gitleaks git --staged --redact --no-banner
+fi
+{%endif%}

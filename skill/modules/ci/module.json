@@ -1,0 +1,5 @@
+{
+  "id": "ci",
+  "summary": "GitHub Actions CI: lanes picked from the diff, lint, types, tests, and one required \"All checks pass\" job.",
+  "files": [{ "path": ".github/workflows/ci.yml" }, { "path": ".github/actions/setup/action.yml" }]
+}

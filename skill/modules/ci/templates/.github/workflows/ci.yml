@@ -1,0 +1,218 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [{%defaultBranch%}]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Picks which lanes a pull request needs. Each output is named after the job it gates, and the
+  # "All checks pass" job accepts a skipped job only when its lane here is false.
+  changes:
+    name: Pick lanes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      check: ${{ steps.lanes.outputs.check }}
+      test: ${{ steps.lanes.outputs.test }}
+      docs: ${{ steps.lanes.outputs.docs }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Pick lanes from the changed files
+        id: lanes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          # ---- lanes: edit these patterns for this repository ----
+          # Extended regular expressions matched against each changed path. LANES maps each lane,
+          # named after the job it gates, to the paths that need it. A path matching SHARED runs every
+          # lane. A path that matches no lane and is not INERT also runs every lane, so a file nobody
+          # classified can never skip a check. A new lane also needs an entry under outputs above.
+          SHARED='^(package\.json|bun\.lock|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig[^/]*\.json|biome\.jsonc?|knip\.jsonc?|\.nvmrc|\.node-version|\.github/)'
+          INERT='^(LICENSE|\.gitignore|\.gitattributes|\.editorconfig)$'
+          declare -A LANES=(
+            [check]='\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json|jsonc|css|grit)$'
+            [test]='\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json)$'
+            [docs]='\.(md|mdx)$'
+          )
+          # ---- end lanes ----
+
+          run_every_lane() {
+            echo "Every lane runs: $1"
+            for lane in "${!LANES[@]}"; do echo "$lane=true" >> "$GITHUB_OUTPUT"; done
+          }
+
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            run_every_lane "$EVENT_NAME event"
+            exit 0
+          fi
+          # A pull request checks out its merge commit, whose first parent is the base branch.
+          if ! changed=$(git diff --name-only HEAD^1 HEAD) || [ -z "$changed" ]; then
+            run_every_lane "the changed files could not be listed"
+            exit 0
+          fi
+          printf 'Changed files:\n%s\n' "$changed"
+          if grep -Eq "$SHARED" <<< "$changed"; then
+            run_every_lane "a shared file changed"
+            exit 0
+          fi
+
+          while IFS= read -r path; do
+            classified=false
+            if [[ $path =~ $INERT ]]; then classified=true; fi
+            for lane in "${!LANES[@]}"; do
+              if [[ $path =~ ${LANES[$lane]} ]]; then classified=true; fi
+            done
+            if [ "$classified" = false ]; then
+              run_every_lane "$path matches no lane"
+              exit 0
+            fi
+          done <<< "$changed"
+
+          for lane in "${!LANES[@]}"; do
+            if grep -Eq "${LANES[$lane]}" <<< "$changed"; then needed=true; else needed=false; fi
+            echo "$lane: $needed"
+            echo "$lane=$needed" >> "$GITHUB_OUTPUT"
+          done
+
+  check:
+    name: Lint and types
+    needs: changes
+    if: needs.changes.outputs.check == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+{%if module:quality%}
+      - run: {%pmRun%} lint
+      - run: {%pmRun%} typecheck
+      - run: {%pmRun%} knip
+      - run: {%pmRun%} types:ratchet
+      - run: {%pmRun%} check:lint-rules
+{%else%}
+      - name: Run the lint and typecheck scripts the project has
+        run: |
+          for script in lint typecheck; do
+            if jq -e --arg name "$script" '.scripts[$name]' package.json > /dev/null; then
+              {%pmRun%} "$script"
+            else
+              echo "package.json has no $script script; skipping it."
+            fi
+          done
+{%endif%}
+
+  test:
+    name: Tests
+    needs: changes
+    if: needs.changes.outputs.test == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+{%if module:tests%}
+      - run: {%pmRun%} test
+{%else%}
+      - name: Run the test script the project has
+        run: |
+          if jq -e '.scripts.test' package.json > /dev/null; then
+            {%pmRun%} test
+          else
+            echo "package.json has no test script; skipping it."
+          fi
+{%endif%}
+{%if module:agent-docs%}
+
+  docs:
+    name: Docs
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: {%pmRun%} check:docs
+{%endif%}
+{%if module:supply-chain%}
+
+  # Runs on every change: a secret can land in any file, docs included.
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl -fsSL -o "$archive" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "$GITLEAKS_SHA256  $archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Scan the new commits
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            gitleaks git --redact --no-banner --log-opts="$BASE_SHA..$HEAD_SHA" .
+          else
+            gitleaks git --redact --no-banner .
+          fi
+{%endif%}
+
+  # The one job branch protection requires. A job may be skipped only when the changes job said
+  # its lane was not needed; a failed, cancelled or wrongly skipped job fails this one.
+  ci-ok:
+    name: All checks pass
+    if: always()
+    needs:
+      - changes
+      - check
+      - test
+{%if module:agent-docs%}
+      - docs
+{%endif%}
+{%if module:supply-chain%}
+      - secrets
+{%endif%}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every job to pass or to skip an unneeded lane
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '(.changes.outputs // {}) as $lanes
+            | all(to_entries[]; .value.result == "success" or (.value.result == "skipped" and $lanes[.key] == "false"))' > /dev/null

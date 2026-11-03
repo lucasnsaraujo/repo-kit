@@ -1,0 +1,11 @@
+#!/bin/sh
+# Runs the tests that cover files changed since the default branch. CI runs the full suite.
+set -eu
+
+cd "$(git rev-parse --show-toplevel)"
+if ! git rev-parse --verify --quiet origin/{%defaultBranch%} >/dev/null; then
+  echo "pre-push: no origin/{%defaultBranch%} yet, so there is nothing to compare against; CI runs the tests"
+  exit 0
+fi
+echo "pre-push: running tests for files changed since origin/{%defaultBranch%}"
+{%pmRun%} test:changed

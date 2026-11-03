@@ -1,0 +1,23 @@
+language js(typescript)
+
+// Class names and inline styles are implementation details: a refactor of the CSS breaks
+// the test while the screen looks the same, and a broken screen can keep the class.
+or {
+  `$subject.$matcher($...)` where {
+    $matcher <: or {
+      `toHaveClass`,
+      `toHaveStyle`,
+      `toHaveCSS`
+    }
+  },
+  `$subject.toHaveAttribute($name, $...)` where {
+    $name <: or {
+      `"class"`,
+      `'class'`,
+      `"style"`,
+      `'style'`
+    }
+  }
+} as $assertion where {
+  register_diagnostic(span=$assertion, message="Assert what the user can observe (role, accessible name, text, state such as toBeVisible or toBeDisabled) instead of class names or inline styles.", severity="error")
+}

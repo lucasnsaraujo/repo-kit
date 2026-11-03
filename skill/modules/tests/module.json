@@ -1,0 +1,18 @@
+{
+  "id": "tests",
+  "summary": "Vitest with a hermetic environment, changed-file test runs, and an end-to-end smoke script.",
+  "files": [
+    { "path": "vitest.config.ts" },
+    { "path": "tools/vitest/hermetic-setup.ts" },
+    { "path": "scripts/smoke.ts" },
+    { "path": "scripts/smoke.config.json" }
+  ],
+  "packageScripts": {
+    "test": "vitest run",
+    "test:changed": "git merge-base origin/{%defaultBranch%} HEAD >/dev/null && vitest run --changed origin/{%defaultBranch%}",
+    "test:related": "vitest related --run",
+    "smoke": "node scripts/smoke.ts"
+  },
+  "lines": [{ "path": ".gitignore", "lines": [".artifacts/"] }],
+  "devDependencies": ["vitest"]
+}

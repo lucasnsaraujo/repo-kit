@@ -1,0 +1,12 @@
+{
+  "id": "hooks",
+  "summary": "Git hooks: staged format and lint, typecheck and knip on commit; changed tests on push.",
+  "requires": ["quality"],
+  "files": [
+    { "path": ".githooks/pre-commit", "executable": true },
+    { "path": ".githooks/pre-push", "executable": true, "when": "module:tests" }
+  ],
+  "packageScripts": {
+    "prepare": "if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then git config core.hooksPath .githooks; fi"
+  }
+}

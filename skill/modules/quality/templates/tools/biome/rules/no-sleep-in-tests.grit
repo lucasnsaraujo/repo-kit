@@ -1,0 +1,13 @@
+language js(typescript)
+
+// A test that waits out a clock passes on a fast machine and flakes on a loaded runner.
+`await $wait` as $sleep where {
+  $wait <: or {
+    `new Promise($executor)` where { $executor <: contains `setTimeout($...)` },
+    `setTimeout($delay)`,
+    `sleep($...)`,
+    `Bun.sleep($...)`,
+    `$_.waitForTimeout($...)`
+  },
+  register_diagnostic(span=$sleep, message="Wait for the condition itself (vi.waitFor, an awaited event or response, expect.poll) instead of a fixed delay: a delay that passes locally flakes on a slower runner.", severity="error")
+}
