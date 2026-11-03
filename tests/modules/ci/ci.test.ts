@@ -2,9 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildVars } from "../../../skill/scripts/lib/apply.ts";
-import { detect } from "../../../skill/scripts/lib/detect.ts";
-import { renderTemplate } from "../../../skill/scripts/lib/render.ts";
+import { buildVars } from "../../../skills/repo-kit/scripts/lib/apply.ts";
+import { detect } from "../../../skills/repo-kit/scripts/lib/detect.ts";
+import { renderTemplate } from "../../../skills/repo-kit/scripts/lib/render.ts";
 import { applyModules, type Lockfile, REPO_ROOT, removeTempDirs, tempDir, writeFiles } from "../../helpers/render-module.ts";
 
 afterEach(removeTempDirs);
@@ -22,7 +22,7 @@ function actionlint(project: string): { status: number | null; output: string } 
 function renderFullWorkflow(lockfile: Lockfile): string {
   const project = applyModules({ lockfile, modules: ["ci"] });
   const vars = buildVars(detect(project), ["ci", "quality", "tests", "agent-docs", "supply-chain"]);
-  const source = readFileSync(join(REPO_ROOT, "skill/modules/ci/templates/.github/workflows/ci.yml"), "utf8");
+  const source = readFileSync(join(REPO_ROOT, "skills/repo-kit/modules/ci/templates/.github/workflows/ci.yml"), "utf8");
   writeFileSync(join(project, ".github/workflows/ci.yml"), renderTemplate(source, vars));
   return project;
 }

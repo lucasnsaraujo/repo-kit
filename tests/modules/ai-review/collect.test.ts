@@ -4,12 +4,12 @@ import {
   rebuttalCandidates,
   responsesSince,
   selectAuthorResponses,
-} from "../../../skill/modules/ai-review/templates/.github/ai-review/collect.ts";
+} from "../../../skills/repo-kit/modules/ai-review/templates/.github/ai-review/collect.ts";
 import {
   type GitHubComment,
   type ReviewState,
   writeStateMarker,
-} from "../../../skill/modules/ai-review/templates/.github/ai-review/state.ts";
+} from "../../../skills/repo-kit/modules/ai-review/templates/.github/ai-review/state.ts";
 
 const bot = { login: "github-actions[bot]", type: "Bot" };
 const owner = { login: "owner", type: "User" };

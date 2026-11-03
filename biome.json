@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!skill/modules/*/templates"]
+    "includes": ["**", "!skills/repo-kit/modules/*/templates"]
   },
   "formatter": {
     "indentStyle": "space",

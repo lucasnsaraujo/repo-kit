@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
-import { parseSmokeConfig, runSmoke, type SmokeConfig } from "../../../skill/modules/tests/templates/scripts/smoke.mts";
+import { parseSmokeConfig, runSmoke, type SmokeConfig } from "../../../skills/repo-kit/modules/tests/templates/scripts/smoke.mts";
 import { applyModules, removeTempDirs, tempDir, writeFiles } from "../../helpers/render-module.ts";
 
 afterEach(removeTempDirs);

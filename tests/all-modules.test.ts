@@ -6,7 +6,7 @@ import { applyModules, type Lockfile, REPO_ROOT, removeTempDirs } from "./helper
 
 afterAll(removeTempDirs);
 
-const allModules = readdirSync(join(REPO_ROOT, "skill/modules"));
+const allModules = readdirSync(join(REPO_ROOT, "skills/repo-kit/modules"));
 
 describe.each<Lockfile>(["bun.lock", "pnpm-lock.yaml"])("every module applied together (%s)", (lockfile) => {
   test("the project passes its own Biome check with no edits", () => {

@@ -1,0 +1,12 @@
+{
+  "name": "repo-kit",
+  "version": "0.1.0",
+  "description": "Set up a TypeScript repo's dev workflow from selectable modules: CI, Claude Code PR review, tests, hooks, env, supply chain, changelog, agent docs and loops.",
+  "author": {
+    "name": "Lucas Araujo",
+    "url": "https://github.com/lucasnsaraujo"
+  },
+  "repository": "https://github.com/lucasnsaraujo/repo-kit",
+  "license": "MIT",
+  "keywords": ["ci", "code-review", "github-actions", "biome", "vitest", "dotenvx", "agents", "scaffolding"]
+}

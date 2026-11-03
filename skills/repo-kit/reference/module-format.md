@@ -1,6 +1,6 @@
 # Module format
 
-A module is a folder under `skill/modules/<id>/` with three parts:
+A module is a folder under `skills/repo-kit/modules/<id>/` with three parts:
 
 ```
 modules/<id>/

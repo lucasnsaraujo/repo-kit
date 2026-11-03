@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { type ReviewState, readStateMarker, writeStateMarker } from "../../../skill/modules/ai-review/templates/.github/ai-review/state.ts";
+import {
+  type ReviewState,
+  readStateMarker,
+  writeStateMarker,
+} from "../../../skills/repo-kit/modules/ai-review/templates/.github/ai-review/state.ts";
 
 const state: ReviewState = {
   version: 1,

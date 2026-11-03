@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "types": ["node", "bun"]
   },
-  "include": ["skill/scripts/**/*.ts", "skill/modules/*/templates/**/*.ts", "tests/**/*.ts"]
+  "include": ["skills/repo-kit/scripts/**/*.ts", "skills/repo-kit/modules/*/templates/**/*.ts", "tests/**/*.ts"]
 }

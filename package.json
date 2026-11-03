@@ -7,12 +7,14 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "biome check --max-diagnostics=none .",
-    "lint:workflows": "actionlint skill/modules/*/templates/.github/workflows/*.yml"
+    "lint:workflows": "actionlint $(grep -L '{%' skills/repo-kit/modules/*/templates/.github/workflows/*.yml)",
+    "check": "bun test && bun run typecheck && bun run lint && bun run lint:workflows"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
     "@types/bun": "1.4.4",
     "@types/node": "24.19.2",
     "typescript": "7.0.2"
-  }
+  },
+  "license": "MIT"
 }
