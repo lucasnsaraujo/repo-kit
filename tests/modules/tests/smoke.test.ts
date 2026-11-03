@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
-import { parseSmokeConfig, runSmoke, type SmokeConfig } from "../../../skill/modules/tests/templates/scripts/smoke.ts";
+import { parseSmokeConfig, runSmoke, type SmokeConfig } from "../../../skill/modules/tests/templates/scripts/smoke.mts";
 import { applyModules, removeTempDirs, tempDir, writeFiles } from "../../helpers/render-module.ts";
 
 afterEach(removeTempDirs);
@@ -109,7 +109,7 @@ test("the smoke script writes .artifacts/smoke.json and exits 1 when a check fai
   });
   writeFiles(project, { "scripts/smoke.config.json": JSON.stringify(failing) });
 
-  const result = spawnSync("node", ["scripts/smoke.ts"], { cwd: project, encoding: "utf8" });
+  const result = spawnSync("node", ["scripts/smoke.mts"], { cwd: project, encoding: "utf8" });
   expect(result.status).toBe(1);
   const report = JSON.parse(readFileSync(join(project, ".artifacts/smoke.json"), "utf8"));
   expect(report.ok).toBe(false);

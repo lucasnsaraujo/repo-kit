@@ -10,11 +10,11 @@ import { applyModules, type Lockfile, REPO_ROOT, removeTempDirs, tempDir, writeF
 afterEach(removeTempDirs);
 
 type Step = { id?: string; run?: string };
-type Workflow = { jobs: Record<string, { steps: Step[] }> };
+type Workflow = { jobs: Record<string, { if?: string; steps: Step[] }> };
 
 function actionlint(project: string): { status: number | null; output: string } {
   execFileSync("git", ["init", "-q"], { cwd: project });
-  const result = spawnSync("/opt/homebrew/bin/actionlint", ["-no-color"], { cwd: project, encoding: "utf8" });
+  const result = spawnSync("actionlint", ["-no-color"], { cwd: project, encoding: "utf8" });
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
 
@@ -27,8 +27,12 @@ function renderFullWorkflow(lockfile: Lockfile): string {
   return project;
 }
 
+function readWorkflow(project: string): Workflow {
+  return Bun.YAML.parse(readFileSync(join(project, ".github/workflows/ci.yml"), "utf8")) as Workflow;
+}
+
 function workflowStep(project: string, job: string, match: (step: Step) => boolean): string {
-  const workflow: Workflow = Bun.YAML.parse(readFileSync(join(project, ".github/workflows/ci.yml"), "utf8")) as Workflow;
+  const workflow = readWorkflow(project);
   const run = workflow.jobs[job]?.steps.find(match)?.run;
   if (run === undefined) throw new Error(`no matching step in ${job}`);
   return run;
@@ -45,6 +49,12 @@ describe("rendered workflows", () => {
       expect(actionlint(renderFullWorkflow(lockfile))).toEqual({ status: 0, output: "" });
     });
   }
+
+  test("the docs and secret scan jobs run on every change, whatever the lanes say", () => {
+    const jobs = readWorkflow(renderFullWorkflow("bun.lock")).jobs;
+    expect(jobs.docs?.if).toBeUndefined();
+    expect(jobs.secrets?.if).toBeUndefined();
+  });
 
   test("the setup action installs with the project's package manager", () => {
     const bun = readFileSync(join(applyModules({ lockfile: "bun.lock", modules: ["ci"] }), ".github/actions/setup/action.yml"), "utf8");
@@ -66,23 +76,27 @@ describe("All checks pass", () => {
   const gate = (needs: Record<string, { result: string; outputs?: Record<string, string> }>) =>
     spawnSync("bash", ["-e", "-c", script], { env: { ...process.env, NEEDS: JSON.stringify(needs) }, encoding: "utf8" }).status;
 
-  const lanes = (check: string, test: string, docs: string) => ({ result: "success", outputs: { check, test, docs } });
+  const lanes = (check: string, test: string) => ({ result: "success", outputs: { check, test } });
 
   test("passes when every job succeeded", () => {
-    expect(gate({ changes: lanes("true", "true", "true"), check: { result: "success" }, test: { result: "success" } })).toBe(0);
+    expect(gate({ changes: lanes("true", "true"), check: { result: "success" }, test: { result: "success" } })).toBe(0);
   });
 
   test("passes when a job skipped because its lane was not needed", () => {
-    expect(gate({ changes: lanes("false", "false", "true"), check: { result: "skipped" }, docs: { result: "success" } })).toBe(0);
+    expect(gate({ changes: lanes("false", "false"), check: { result: "skipped" }, docs: { result: "success" } })).toBe(0);
   });
 
   test("fails when a job skipped although its lane was needed", () => {
-    expect(gate({ changes: lanes("true", "true", "true"), check: { result: "skipped" }, test: { result: "success" } })).toBe(1);
+    expect(gate({ changes: lanes("true", "true"), check: { result: "skipped" }, test: { result: "success" } })).toBe(1);
   });
 
   test("fails when a job failed or was cancelled", () => {
-    expect(gate({ changes: lanes("true", "true", "true"), check: { result: "failure" }, test: { result: "success" } })).toBe(1);
-    expect(gate({ changes: lanes("true", "true", "true"), check: { result: "success" }, test: { result: "cancelled" } })).toBe(1);
+    expect(gate({ changes: lanes("true", "true"), check: { result: "failure" }, test: { result: "success" } })).toBe(1);
+    expect(gate({ changes: lanes("true", "true"), check: { result: "success" }, test: { result: "cancelled" } })).toBe(1);
+  });
+
+  test("fails when a job without a lane, such as docs, was skipped", () => {
+    expect(gate({ changes: lanes("false", "false"), check: { result: "skipped" }, docs: { result: "skipped" } })).toBe(1);
   });
 
   test("fails when the changes job itself failed and everything skipped", () => {
@@ -121,26 +135,26 @@ describe("lane picking", () => {
     );
   }
 
-  test("a markdown-only change runs only the docs lane", () => {
-    expect(pickLanes({ "README.md": "edited\n" })).toEqual({ check: "false", test: "false", docs: "true" });
+  test("a markdown-only change skips the code lanes", () => {
+    expect(pickLanes({ "README.md": "edited\n", "docs/guide.mdx": "x\n" })).toEqual({ check: "false", test: "false" });
   });
 
-  test("a source change runs the code lanes and skips docs", () => {
-    expect(pickLanes({ "src/app.ts": "export const a = 1;\n" })).toEqual({ check: "true", test: "true", docs: "false" });
+  test("a source change runs the code lanes", () => {
+    expect(pickLanes({ "src/app.ts": "export const a = 1;\n" })).toEqual({ check: "true", test: "true" });
   });
 
   test("a lockfile, manifest or workflow change runs every lane", () => {
-    const all = { check: "true", test: "true", docs: "true" };
+    const all = { check: "true", test: "true" };
     expect(pickLanes({ "bun.lock": "changed\n" })).toEqual(all);
     expect(pickLanes({ "package.json": "{}\n" })).toEqual(all);
     expect(pickLanes({ ".github/workflows/other.yml": "x: 1\n" })).toEqual(all);
   });
 
   test("a path no lane claims runs every lane", () => {
-    expect(pickLanes({ Dockerfile: "FROM scratch\n", "README.md": "edited\n" })).toEqual({ check: "true", test: "true", docs: "true" });
+    expect(pickLanes({ Dockerfile: "FROM scratch\n", "README.md": "edited\n" })).toEqual({ check: "true", test: "true" });
   });
 
   test("a push runs every lane whatever changed", () => {
-    expect(pickLanes({ "README.md": "edited\n" }, "push")).toEqual({ check: "true", test: "true", docs: "true" });
+    expect(pickLanes({ "README.md": "edited\n" }, "push")).toEqual({ check: "true", test: "true" });
   });
 });

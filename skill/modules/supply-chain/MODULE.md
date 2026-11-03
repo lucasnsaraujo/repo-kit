@@ -4,7 +4,7 @@
 
 - bun: `bunfig.toml` with `exact = true` and `minimumReleaseAge = 259200` (seconds, 3 days), plus a commented `minimumReleaseAgeExcludes` example.
 - pnpm: `pnpm-workspace.yaml` with `minimumReleaseAge: 4320` (minutes, 3 days), `saveExact: true`, and an empty `allowBuilds` map, so no dependency runs an install script until someone allows it by name.
-- `.github/dependabot.yml`: weekly package updates, minor and patch in one group, majors ignored, `cooldown.default-days: 3` to match the release age; monthly `github-actions` updates keep SHA-pinned actions and their version comments current.
+- `.github/dependabot.yml`: labels `dependencies` (plus `no-changelog` when the `changelog` module is selected), weekly package updates, minor and patch in one group, majors ignored, `cooldown.default-days: 3` to match the release age; monthly `github-actions` updates keep SHA-pinned actions and their version comments current.
 - When this module is selected, the gitleaks CI job (`ci` module) and the gitleaks pre-commit step (`hooks` module) turn on as well; they live in those modules.
 
 ## Tailor
@@ -16,6 +16,15 @@
 5. **Exempt your own packages.** When the project depends on packages its own team publishes, add them to `minimumReleaseAgeExcludes` (bun) or `minimumReleaseAgeExclude` (pnpm), so a fix you publish lands without the wait. Done when each exemption is a package the team owns.
 
 ## Owner steps
+
+- Create the labels Dependabot applies, before the pull request that adds `.github/dependabot.yml` merges. Dependabot skips a label the repository does not have, and with `changelog` selected an unlabelled update fails the release-notes check:
+
+  ```sh
+  gh label create dependencies --description "Dependency update" --color 0366d6 --force
+  gh label create no-changelog --description "No user-visible change: skip the release notes check" --color ededed --force
+  ```
+
+  Skip the second command when the `changelog` module is not selected.
 
 - Turn on Dependabot alerts and security updates (security updates ignore the cooldown):
 

@@ -10,6 +10,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    labels:
+      - dependencies
+{%if module:changelog%}
+      # A version bump has no user-facing release note; the label skips the changelog check.
+      - no-changelog
+{%endif%}
     # Matches the 3-day minimum release age of the package manager, which rejects newer versions.
     cooldown:
       default-days: 3
@@ -32,6 +38,11 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+    labels:
+      - dependencies
+{%if module:changelog%}
+      - no-changelog
+{%endif%}
     groups:
       github-actions:
         patterns:

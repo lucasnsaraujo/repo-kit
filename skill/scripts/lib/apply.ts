@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { Detection, PackageJson } from "./detect.ts";
-import { readPackageJson } from "./detect.ts";
+import { type Detection, detect, type PackageJson, readPackageJson } from "./detect.ts";
 import type { LoadedModule } from "./modules.ts";
 import { resolveSelection } from "./modules.ts";
 import { renderTemplate, type TemplateVars } from "./render.ts";
@@ -11,7 +10,7 @@ import { KIT_VERSION } from "./version.ts";
 export const LOCK_FILE = ".repo-kit.json";
 export const NEW_SUFFIX = ".repo-kit-new";
 
-export type LockEntry = { module: string; sha256: string; adopted?: boolean };
+type LockEntry = { module: string; sha256: string; adopted?: boolean };
 export type Lock = { kitVersion: string; modules: string[]; files: Record<string, LockEntry> };
 
 export type ConflictReason = "unmanaged" | "edited" | "adopted";
@@ -34,7 +33,7 @@ export type Plan = {
   installCommand: string | null;
 };
 
-export function sha256(content: string): string {
+function sha256(content: string): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
@@ -265,7 +264,11 @@ export function adopt(root: string, paths: string[], modules: Map<string, Loaded
   return lock;
 }
 
-export function remove(root: string, moduleId: string, modules: Map<string, LoadedModule>): { deleted: string[]; kept: string[] } {
+export function remove(
+  root: string,
+  moduleId: string,
+  modules: Map<string, LoadedModule>,
+): { deleted: string[]; kept: string[]; removedScripts: string[] } {
   const lock = readLock(root);
   if (!lock) throw new Error(`${LOCK_FILE} not found: run apply first`);
   const dependents = lock.modules.filter((id) => id !== moduleId && modules.get(id)?.requires.includes(moduleId));
@@ -283,7 +286,23 @@ export function remove(root: string, moduleId: string, modules: Map<string, Load
     }
     delete lock.files[path];
   }
+  const removedScripts = dropUntouchedScripts(root, modules.get(moduleId), buildVars(detect(root), lock.modules));
   lock.modules = lock.modules.filter((id) => id !== moduleId);
   writeLock(root, lock);
-  return { deleted, kept };
+  if (lock.modules.length > 0) execute(root, plan({ root, detection: detect(root), modules, requested: [] }));
+  return { deleted, kept, removedScripts };
+}
+
+/** Deletes the module's package scripts that still hold exactly the command the kit wrote. */
+function dropUntouchedScripts(root: string, module: LoadedModule | undefined, vars: TemplateVars): string[] {
+  const pkg = readPackageJson(root);
+  if (!module || !pkg?.scripts) return [];
+  const removed: string[] = [];
+  for (const [name, rawCommand] of Object.entries(module.packageScripts)) {
+    if (pkg.scripts[name] !== renderTemplate(rawCommand, vars)) continue;
+    delete pkg.scripts[name];
+    removed.push(name);
+  }
+  if (removed.length > 0) writeFileSync(join(root, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
+  return removed;
 }

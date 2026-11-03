@@ -1,16 +1,20 @@
-// Builds the two inputs of a review run from the base and head commits:
+// Builds everything a review run reads, from the base and head commits:
 //   system-prompt.md  trusted: prompt.md, AGENTS.md files and domain rules from the base commit, the review scope
 //   user-message.md   untrusted: the PR title, description, diff, previous findings and author responses
 //   meta.json         what publish.ts needs to merge and render the result
+//   <files>/          per-file diffs and fork-point versions, so the reviewer needs no git access
 //
-//   node compose-prompt.ts --base <sha> --head <sha> [--context <collect.ts output>] [--out <dir>]
+//   node compose-prompt.ts --base <sha> --head <sha> [--context <collect.ts output>] [--out <dir>] [--files <dir>]
+//   node compose-prompt.ts --check-rules
 //
 // Without --out it prints both parts, which is the dry run. prompt.md and rules/ are read from this
 // script's own folder: the workflow runs a copy taken from the base commit, so a pull request cannot
-// rewrite the instructions its own review follows.
+// rewrite the instructions its own review follows. Every diff reads .gitattributes from the base
+// commit too, so a pull request cannot mark its own files as binary to hide them.
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, posix, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { type ReviewContext, readContext } from "./collect.ts";
 import { githubTimestamp, type ReviewMeta, type ReviewScope, type StoredFinding } from "./state.ts";
@@ -19,7 +23,7 @@ const AGENT_DOCS_CAP_BYTES = 40_000;
 const INLINE_DIFF_CAP_BYTES = 150_000;
 const WIDE_DIFF_CONTEXT = 20;
 
-export type ReviewRule = { path: string; include: string[]; body: string };
+type ReviewRule = { path: string; include: string[]; body: string };
 
 /** Glob subset used by rule front matter: `**`, `*`, `?` and `{a,b}`. */
 export function matchesGlob(glob: string, path: string): boolean {
@@ -100,60 +104,68 @@ export function capSections(sections: { heading: string; body: string }[], capBy
       used += size;
     } else dropped.push(section.heading);
   }
-  if (dropped.length > 0) {
-    kept.push(
-      `[truncated at ${capBytes} bytes: ${dropped.join(", ")} left out. Read them from the base commit with \`git show\` when a finding depends on them.]\n`,
-    );
-  }
+  if (dropped.length > 0) kept.push(`[truncated at ${capBytes} bytes: ${dropped.join(", ")} left out]\n`);
   return kept.join("\n");
 }
 
 /**
  * Reviews only the commits since the last review when that review's commit is still in the head's
- * history and the base has not moved past it (a base merge would put the base's changes in the range).
+ * history and the pull request's fork point (the merge base with the base branch) comes before it.
+ * The base branch moving on keeps the fork point; merging it into the pull request moves the fork
+ * point past the reviewed commit, and the range since then would carry the base branch's changes.
  */
 export function chooseScope(input: {
-  baseSha: string;
+  forkPoint: string;
   headSha: string;
   reviewedSha: string | null;
   isAncestor: (ancestor: string, descendant: string) => boolean;
 }): ReviewScope {
-  const { baseSha, headSha, reviewedSha, isAncestor } = input;
-  if (reviewedSha && isAncestor(reviewedSha, headSha) && isAncestor(baseSha, reviewedSha))
+  const { forkPoint, headSha, reviewedSha, isAncestor } = input;
+  if (reviewedSha && isAncestor(reviewedSha, headSha) && isAncestor(forkPoint, reviewedSha))
     return { kind: "since", reviewedSha };
   return { kind: "full" };
 }
 
 /** Wraps untrusted text in a fence longer than any backtick run inside it, so the text cannot close it. */
-export function fenced(text: string, info = ""): string {
+function fenced(text: string, info = ""): string {
   const longestRun = Math.max(0, ...[...text.matchAll(/`+/g)].map((match) => match[0].length));
   const fence = "`".repeat(Math.max(3, longestRun + 1));
   return `${fence}${info}\n${text.endsWith("\n") ? text : `${text}\n`}${fence}`;
 }
 
-export function diffSection(input: { diff: string; files: string[]; command: string; limitBytes: number }): string {
-  const { diff, files, command, limitBytes } = input;
+const diffFile = (directory: string, path: string) => `${directory}/${path}.diff`;
+
+export function diffSection(input: { diff: string; files: string[]; perFileDir: string; limitBytes: number }): string {
+  const { diff, files, perFileDir, limitBytes } = input;
   if (diff.trim() === "") return "The diff is empty.";
   const block = fenced(diff, "diff");
   if (Buffer.byteLength(block) <= limitBytes) {
-    return `The output of \`${command}\` is below. Read it here instead of running it again, and open files only for code outside it.\n\n${block}`;
+    return `The diff is below. Read it here; the same diff split per file is under \`${perFileDir}/\`.\n\n${block}`;
   }
   return [
-    `The diff is too large to include. Read it one file at a time with \`${command} -- <path>\`, in this order:`,
+    "The diff is too large to include. Read the diff of each file with Read, one file at a time, in this order:",
     "",
-    ...files.map((file) => `- ${file}`),
+    ...files.map((file) => `- \`${diffFile(perFileDir, file)}\``),
   ].join("\n");
 }
 
-function scopeSection(scope: ReviewScope, baseSha: string, headSha: string): string {
+type ReviewFiles = { pr: string; since: string; base: string };
+
+function scopeSection(scope: ReviewScope, headSha: string, files: ReviewFiles): string {
+  const where = [
+    `The diff of the whole pull request, split per file, is under \`${files.pr}/\` as \`<path>.diff\`.`,
+    `The version of each changed file before the pull request is under \`${files.base}/<path>\`; the working directory holds the current version.`,
+  ];
   if (scope.kind === "full")
-    return `## Review scope\n\nReview the whole pull request: \`git diff ${baseSha}...${headSha}\`.\n`;
+    return ["## Review scope", "", "Review the whole pull request.", "", ...where, ""].join("\n");
   const lines = [
     "## Review scope",
     "",
     `The last review covered commit ${scope.reviewedSha}. Review what changed since then: raise a NEW finding only in that change, or in older code of this pull request that the change breaks. Recheck every previous finding against the full current code.`,
     "",
-    `The whole pull request is \`git diff ${baseSha}...${headSha}\`. Read one file of it at a time, and only when a change since the last review depends on it.`,
+    `The diff since the last review, split per file, is under \`${files.since}/\` as \`<path>.diff\`.`,
+    ...where,
+    "Read a whole-pull-request diff only when a change since the last review depends on it.",
   ];
   if (scope.reviewedSha === headSha) {
     lines.push(
@@ -164,13 +176,13 @@ function scopeSection(scope: ReviewScope, baseSha: string, headSha: string): str
   return `${lines.join("\n")}\n`;
 }
 
-export function composeSystemPrompt(input: {
+function composeSystemPrompt(input: {
   instructions: string;
   agentDocs: { heading: string; body: string }[];
   rules: ReviewRule[];
   scope: ReviewScope;
-  baseSha: string;
   headSha: string;
+  files: ReviewFiles;
 }): string {
   const parts = [input.instructions.trim(), ""];
   if (input.agentDocs.length > 0) {
@@ -191,7 +203,7 @@ export function composeSystemPrompt(input: {
     );
     parts.push(...input.rules.map((rule) => `${rule.body}\n`));
   }
-  parts.push(scopeSection(input.scope, input.baseSha, input.headSha));
+  parts.push(scopeSection(input.scope, input.headSha, input.files));
   return parts.join("\n");
 }
 
@@ -199,7 +211,7 @@ function findingsJson(findings: StoredFinding[]): string {
   return findings.length === 0 ? "[none]" : fenced(JSON.stringify(findings, null, 2), "json");
 }
 
-export function composeUserMessage(input: {
+function composeUserMessage(input: {
   prNumber: string;
   context: ReviewContext;
   baseSha: string;
@@ -254,16 +266,66 @@ export function composeUserMessage(input: {
   ].join("\n");
 }
 
-function git(args: string[]): string {
-  return execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+type Git = {
+  text(args: string[]): string;
+  bytes(args: string[]): Buffer;
+  succeeds(args: string[]): boolean;
+};
+
+/** Git in `repoDir`. With `attrSource`, attributes come from that commit instead of the checkout (git 2.40+). */
+function gitIn(repoDir: string, attrSource?: string): Git {
+  const options = {
+    cwd: repoDir,
+    maxBuffer: 256 * 1024 * 1024,
+    env: attrSource ? { ...process.env, GIT_ATTR_SOURCE: attrSource } : process.env,
+  };
+  return {
+    text: (args) => execFileSync("git", args, { ...options, encoding: "utf8" }),
+    bytes: (args) => execFileSync("git", args, options),
+    succeeds: (args) => spawnSync("git", args, options).status === 0,
+  };
 }
 
-function isAncestor(ancestor: string, descendant: string): boolean {
-  return spawnSync("git", ["merge-base", "--is-ancestor", ancestor, descendant]).status === 0;
+type ChangedFile = { path: string; oldPath: string | null };
+
+/** Parses `git diff -z --name-status --find-renames`: a status, then one path, or two for a rename or copy. */
+function parseNameStatus(output: string): ChangedFile[] {
+  const fields = output.split("\0");
+  const files: ChangedFile[] = [];
+  for (let index = 0; index < fields.length; ) {
+    const status = fields[index++] ?? "";
+    if (status === "") continue;
+    const first = fields[index++] ?? "";
+    if (status.startsWith("R") || status.startsWith("C")) files.push({ path: fields[index++] ?? "", oldPath: first });
+    else files.push({ path: first, oldPath: null });
+  }
+  return files;
 }
 
-function lines(text: string): string[] {
-  return text.split("\n").filter((line) => line.trim() !== "");
+/** Writes below `root` only; a path that would land outside it is skipped. */
+function writeInside(root: string, relativePath: string, content: string | Buffer): void {
+  const target = resolve(root, relativePath);
+  if (!target.startsWith(resolve(root) + sep)) return;
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, content);
+}
+
+function writePerFileDiffs(git: Git, range: string[], files: ChangedFile[], directory: string): void {
+  for (const file of files) {
+    const paths = file.oldPath ? [file.oldPath, file.path] : [file.path];
+    const diff = git.text(["diff", "--find-renames", `--unified=${WIDE_DIFF_CONTEXT}`, ...range, "--", ...paths]);
+    writeInside(directory, `${file.path}.diff`, diff);
+  }
+}
+
+/** Wide context first, so the reviewer rarely opens a file for the code around a hunk; default context when that is too large. */
+function inlineDiff(git: Git, range: string[], files: string[], perFileDir: string): string {
+  const wide = git.text(["diff", "--find-renames", `--unified=${WIDE_DIFF_CONTEXT}`, ...range]);
+  const diff =
+    Buffer.byteLength(fenced(wide, "diff")) <= INLINE_DIFF_CAP_BYTES
+      ? wide
+      : git.text(["diff", "--find-renames", ...range]);
+  return diffSection({ diff, files, perFileDir, limitBytes: INLINE_DIFF_CAP_BYTES });
 }
 
 function readRules(directory: string): ReviewRule[] {
@@ -274,62 +336,107 @@ function readRules(directory: string): ReviewRule[] {
     .map((name) => parseRule(`rules/${name}`, readFileSync(join(directory, name), "utf8")));
 }
 
-/** Wide context first, so the reviewer rarely reopens a file for the code around a hunk; default context when that is too large. */
-function inlineDiff(range: string[], files: string[]): string {
-  const diffWith = (context: number) => ({
-    diff: git(["diff", "--find-renames", `--unified=${context}`, ...range]),
-    command: `git diff --find-renames --unified=${context} ${range.join(" ")}`,
-  });
-  const wide = diffWith(WIDE_DIFF_CONTEXT);
-  const chosen = Buffer.byteLength(fenced(wide.diff, "diff")) <= INLINE_DIFF_CAP_BYTES ? wide : diffWith(3);
-  return diffSection({ ...chosen, files, limitBytes: INLINE_DIFF_CAP_BYTES });
-}
+const nonEmptyLines = (text: string) => text.split("\n").filter((line) => line.trim() !== "");
 
-function compose(options: { base: string; head: string; contextFile: string | undefined }) {
-  const baseSha = git(["rev-parse", "--verify", `${options.base}^{commit}`]).trim();
-  const headSha = git(["rev-parse", "--verify", `${options.head}^{commit}`]).trim();
-  const context: ReviewContext = options.contextFile
-    ? readContext(JSON.parse(readFileSync(options.contextFile, "utf8")))
-    : { title: "", body: "", previous: null, responses: [], omittedResponses: 0, readAt: githubTimestamp(new Date()) };
+export function compose(input: {
+  repoDir: string;
+  base: string;
+  head: string;
+  context: ReviewContext;
+  filesDir: string;
+  prNumber?: string | undefined;
+}): { systemPrompt: string; userMessage: string; meta: ReviewMeta } {
+  const { context } = input;
+  const resolveCommit = (ref: string) =>
+    gitIn(input.repoDir)
+      .text(["rev-parse", "--verify", `${ref}^{commit}`])
+      .trim();
+  const baseSha = resolveCommit(input.base);
+  const headSha = resolveCommit(input.head);
+  const git = gitIn(input.repoDir, baseSha);
+
+  const forkPoint = git.text(["merge-base", baseSha, headSha]).trim();
   const previous = context.previous?.state ?? null;
-  const scope = chooseScope({ baseSha, headSha, reviewedSha: previous?.reviewedSha ?? null, isAncestor });
+  const scope = chooseScope({
+    forkPoint,
+    headSha,
+    reviewedSha: previous?.reviewedSha ?? null,
+    isAncestor: (ancestor, descendant) => git.succeeds(["merge-base", "--is-ancestor", ancestor, descendant]),
+  });
 
-  const changedFiles = lines(git(["diff", "--name-only", `${baseSha}...${headSha}`]));
-  const range = scope.kind === "since" ? [scope.reviewedSha, headSha] : [`${baseSha}...${headSha}`];
-  const scopeFiles = scope.kind === "since" ? lines(git(["diff", "--name-only", ...range])) : changedFiles;
+  const files: ReviewFiles = {
+    pr: join(input.filesDir, "pr"),
+    since: join(input.filesDir, "since"),
+    base: join(input.filesDir, "base"),
+  };
+  for (const directory of [files.pr, files.base]) mkdirSync(directory, { recursive: true });
+  const prRange = [`${baseSha}...${headSha}`];
+  const prFiles = parseNameStatus(git.text(["diff", "-z", "--name-status", "--find-renames", ...prRange]));
+  writePerFileDiffs(git, prRange, prFiles, files.pr);
+  const atForkPoint = new Set(git.text(["ls-tree", "-r", "-z", "--name-only", forkPoint]).split("\0"));
+  for (const file of prFiles) {
+    const original = file.oldPath ?? file.path;
+    if (atForkPoint.has(original)) writeInside(files.base, original, git.bytes(["show", `${forkPoint}:${original}`]));
+  }
 
-  const ownDirectory = import.meta.dirname;
+  let scopeRange = prRange;
+  let scopeFiles = prFiles;
+  let scopeDir = files.pr;
+  if (scope.kind === "since") {
+    scopeRange = [scope.reviewedSha, headSha];
+    scopeFiles = parseNameStatus(git.text(["diff", "-z", "--name-status", "--find-renames", ...scopeRange]));
+    scopeDir = files.since;
+    mkdirSync(scopeDir, { recursive: true });
+    writePerFileDiffs(git, scopeRange, scopeFiles, scopeDir);
+  }
+
+  const changedPaths = prFiles.map((file) => file.path);
   const existingDocs = new Set(
-    lines(git(["ls-tree", "-r", "--name-only", baseSha])).filter((path) => posix.basename(path) === "AGENTS.md"),
+    nonEmptyLines(git.text(["ls-tree", "-r", "--name-only", baseSha])).filter(
+      (path) => posix.basename(path) === "AGENTS.md",
+    ),
   );
-  const agentDocs = agentDocPaths(changedFiles, existingDocs).map((path) => ({
+  const agentDocs = agentDocPaths(changedPaths, existingDocs).map((path) => ({
     heading: path,
-    body: git(["show", `${baseSha}:${path}`]),
+    body: git.text(["show", `${baseSha}:${path}`]),
   }));
 
+  const ownDirectory = import.meta.dirname;
   const systemPrompt = composeSystemPrompt({
     instructions: readFileSync(join(ownDirectory, "prompt.md"), "utf8"),
     agentDocs,
-    rules: selectRules(readRules(join(ownDirectory, "rules")), changedFiles),
+    rules: selectRules(readRules(join(ownDirectory, "rules")), changedPaths),
     scope,
-    baseSha,
     headSha,
+    files,
   });
   const userMessage = composeUserMessage({
-    prNumber: process.env.PR_NUMBER ?? "(dry run)",
+    prNumber: input.prNumber ?? "(dry run)",
     context,
     baseSha,
     headSha,
-    changedFiles,
-    diff: inlineDiff(range, scopeFiles),
+    changedFiles: changedPaths,
+    diff: inlineDiff(
+      git,
+      scopeRange,
+      scopeFiles.map((file) => file.path),
+      scopeDir,
+    ),
   });
-  const meta: ReviewMeta = { baseSha, headSha, scope, previous, responsesReadAt: context.readAt };
+  const meta: ReviewMeta = {
+    baseSha,
+    headSha,
+    scope,
+    previous,
+    responsesReadAt: context.readAt,
+    responseCount: context.responses.length,
+  };
   return { systemPrompt, userMessage, meta };
 }
 
 /** Prints how many tracked files each rule's globs match, to check globs written for this repository. */
 function checkRules(): void {
-  const tracked = lines(git(["ls-files"]));
+  const tracked = nonEmptyLines(gitIn(process.cwd()).text(["ls-files"]));
   for (const rule of readRules(join(import.meta.dirname, "rules"))) {
     const matches = tracked.filter((file) => rule.include.some((glob) => matchesGlob(glob, file)));
     console.log(
@@ -345,6 +452,7 @@ if (import.meta.main) {
       head: { type: "string" },
       context: { type: "string" },
       out: { type: "string" },
+      files: { type: "string" },
       "check-rules": { type: "boolean" },
     },
   });
@@ -354,14 +462,27 @@ if (import.meta.main) {
   }
   if (!values.base || !values.head) {
     console.error(
-      "usage: node compose-prompt.ts --base <sha> --head <sha> [--context <file>] [--out <dir>] | --check-rules",
+      "usage: node compose-prompt.ts --base <sha> --head <sha> [--context <file>] [--out <dir>] [--files <dir>] | --check-rules",
     );
     process.exit(2);
   }
+  const filesDir = resolve(values.files ?? mkdtempSync(join(tmpdir(), "ai-review-files-")));
   const { systemPrompt, userMessage, meta } = compose({
+    repoDir: process.cwd(),
     base: values.base,
     head: values.head,
-    contextFile: values.context,
+    context: values.context
+      ? readContext(JSON.parse(readFileSync(values.context, "utf8")))
+      : {
+          title: "",
+          body: "",
+          previous: null,
+          responses: [],
+          omittedResponses: 0,
+          readAt: githubTimestamp(new Date()),
+        },
+    filesDir,
+    prNumber: process.env.PR_NUMBER,
   });
   if (values.out) {
     mkdirSync(values.out, { recursive: true });
@@ -369,7 +490,7 @@ if (import.meta.main) {
     writeFileSync(join(values.out, "user-message.md"), userMessage);
     writeFileSync(join(values.out, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
     console.log(
-      `Scope: ${meta.scope.kind}. System prompt ${Buffer.byteLength(systemPrompt)} bytes, user message ${Buffer.byteLength(userMessage)} bytes.`,
+      `Scope: ${meta.scope.kind}. System prompt ${Buffer.byteLength(systemPrompt)} bytes, user message ${Buffer.byteLength(userMessage)} bytes. Files: ${filesDir}`,
     );
   } else {
     process.stdout.write(`${systemPrompt}\n\n===== user message (stdin) =====\n\n${userMessage}`);

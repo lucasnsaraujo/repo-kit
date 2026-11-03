@@ -52,7 +52,7 @@ For each selected module, in the order apply printed, read `modules/<id>/MODULE.
 
 Edit a kit-written file only when the Tailor step says to, and then `KIT adopt` it.
 
-Done when every Tailor step of every selected module meets its criterion, no `*.repo-kit-new` file is left, and `KIT check` lists only files you adopted on purpose.
+Done when every Tailor step of every selected module meets its criterion, no `*.repo-kit-new` file is left, and `KIT check` prints `[]`.
 
 ## 6. Verify
 
@@ -74,7 +74,7 @@ Commit on the branch in logical steps: one commit for the engine output, then on
 
 ## Updating a project later
 
-Run steps 1, 3, 4, 5 and 6 with the recorded modules (`KIT apply --modules <any new ids>` keeps the old ones). Untouched files update in place. Edited and adopted files get a `.repo-kit-new` proposal to merge. `KIT check` reports drift between updates. `KIT remove <module>` deletes that module's untouched files and keeps edited ones.
+Run steps 1, 3, 4, 5 and 6 with the recorded modules (`KIT apply --modules <any new ids>` keeps the old ones). Untouched files update in place. Edited and adopted files get a `.repo-kit-new` proposal to merge. `KIT check` reports drift between updates. `KIT remove <module>` deletes that module's untouched files and package scripts, keeps edited ones, and re-renders the other modules' untouched files so they stop mentioning it.
 
 ## Reference
 

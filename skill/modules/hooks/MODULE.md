@@ -2,7 +2,7 @@
 
 ## Sets up
 
-- `.githooks/pre-commit` (POSIX sh), the fast local gate; CI runs the full suite on every pull request:
+- `.githooks/pre-commit` (POSIX sh), the fast local gate: when it reports a problem, fix it and commit again. CI runs the full suite on every pull request:
   - runs `check:staged` (Biome formats and lints the staged files and fixes what it can);
   - stages the fixes again for files that were fully staged. When the fixer changed a file that also has unstaged edits, it stops the commit and names the file, because staging it would also commit the edits you left out;
   - runs `typecheck` when a staged change touches a `.ts`/`.tsx`/`.mts`/`.cts` file, a `tsconfig*.json` or a `package.json` (deletions count);
@@ -17,7 +17,6 @@
 1. **Retire the old hook manager.** If the project uses husky, lefthook or simple-git-hooks, move any check they run that this hook lacks into `.githooks/pre-commit` (keep it POSIX sh), then remove the tool, its config, and its `prepare` or `postinstall` script. Done when `git config core.hooksPath` prints `.githooks` and `package.json` mentions none of those tools.
 2. **Merge the `prepare` script.** When the project already had a `prepare` script (reported as `script-conflict`), join the two with `&&`, the hooks command last. Done when `<pm> run prepare` exits 0 and `git config core.hooksPath` prints `.githooks`.
 3. **Keep the hook fast.** Time a typical commit with `time git commit`. If `typecheck` is the slow part in a monorepo, call a script that typechecks only the projects that contain staged files. Done when a one-file commit finishes in under about 10 seconds, or `AGENTS.md` says why it cannot.
-4. **Say how to skip it.** In `AGENTS.md`, note that `git commit --no-verify` skips the hook for work-in-progress commits and that CI still runs everything. Done when `grep -n "no-verify" AGENTS.md` finds the line.
 
 ## Owner steps
 

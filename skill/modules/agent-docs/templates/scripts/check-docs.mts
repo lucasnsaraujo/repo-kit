@@ -2,7 +2,7 @@
 // `#anchor` the target Markdown file does not have, or when an AGENTS.md outgrows its line budget.
 // Web links and links inside code are not checked.
 //
-//   node scripts/check-docs.ts [--root <dir>] [--root-budget <lines>] [--nested-budget <lines>]
+//   node scripts/check-docs.mts [--root <dir>] [--root-budget <lines>] [--nested-budget <lines>]
 //
 // Budgets default to 300 lines for the root AGENTS.md and 150 for a nested one. A
 // `docs-budget.json` next to this script ({ "root": 300, "nested": 150 }) changes the defaults;
@@ -13,8 +13,8 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, join, normalize, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 
-export type DocProblem = { file: string; line: number; message: string };
-export type DocsBudget = { root: number; nested: number };
+type DocProblem = { file: string; line: number; message: string };
+type DocsBudget = { root: number; nested: number };
 
 const DEFAULT_BUDGET: DocsBudget = { root: 300, nested: 150 };
 const INLINE_LINK = /!?\[[^\]]*\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g;
@@ -113,7 +113,7 @@ function decode(value: string): string {
   }
 }
 
-export function findLinkProblems(root: string, files: string[]): DocProblem[] {
+function findLinkProblems(root: string, files: string[]): DocProblem[] {
   const problems: DocProblem[] = [];
   const anchorCache = new Map<string, Set<string>>();
   const anchorsOf = (path: string) => {
@@ -152,7 +152,7 @@ export function findLinkProblems(root: string, files: string[]): DocProblem[] {
   return problems;
 }
 
-export function findBudgetProblems(root: string, files: string[], budget: DocsBudget): DocProblem[] {
+function findBudgetProblems(root: string, files: string[], budget: DocsBudget): DocProblem[] {
   const problems: DocProblem[] = [];
   for (const file of files) {
     if (basename(file) !== "AGENTS.md") continue;

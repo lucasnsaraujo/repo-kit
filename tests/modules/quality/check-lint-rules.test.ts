@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { flaggedLines, judgeRule, markedLines } from "../../../skill/modules/quality/templates/scripts/check-lint-rules.ts";
+import { flaggedLines, judgeRule, markedLines } from "../../../skill/modules/quality/templates/scripts/check-lint-rules.mts";
 import { applyModules, removeTempDirs, writeFiles } from "../../helpers/render-module.ts";
 
 afterEach(removeTempDirs);
@@ -49,7 +49,7 @@ describe("judgeRule", () => {
 });
 
 describe("the shipped rules under the installed Biome", () => {
-  const run = (project: string) => spawnSync("node", ["scripts/check-lint-rules.ts"], { cwd: project, encoding: "utf8" });
+  const run = (project: string) => spawnSync("node", ["scripts/check-lint-rules.mts"], { cwd: project, encoding: "utf8" });
 
   test("every rule flags exactly its fixture's marked lines", () => {
     const project = applyModules({ lockfile: "bun.lock", modules: ["quality"], linkNodeModules: true });

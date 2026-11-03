@@ -4,14 +4,14 @@
   "files": [
     { "path": "vitest.config.ts" },
     { "path": "tools/vitest/hermetic-setup.ts" },
-    { "path": "scripts/smoke.ts" },
+    { "path": "scripts/smoke.mts" },
     { "path": "scripts/smoke.config.json" }
   ],
   "packageScripts": {
     "test": "vitest run",
     "test:changed": "git merge-base origin/{%defaultBranch%} HEAD >/dev/null && vitest run --changed origin/{%defaultBranch%}",
     "test:related": "vitest related --run",
-    "smoke": "node scripts/smoke.ts"
+    "smoke": "node scripts/smoke.mts"
   },
   "lines": [{ "path": ".gitignore", "lines": [".artifacts/"] }],
   "devDependencies": ["vitest"]

@@ -9,7 +9,6 @@ import { type LoadedModule, loadModules } from "../../../skill/scripts/lib/modul
 
 const MODULES_DIR = resolve(import.meta.dirname, "../../../skill/modules");
 const OWN_MODULES = ["agent-docs", "agent-loops", "env", "supply-chain", "changelog"];
-const ACTIONLINT = "/opt/homebrew/bin/actionlint";
 
 const temps: string[] = [];
 afterEach(() => {
@@ -35,13 +34,13 @@ function ownModules(): Map<string, LoadedModule> {
   return modules;
 }
 
-function renderInto(lockfile: "bun.lock" | "pnpm-lock.yaml") {
+function renderInto(lockfile: "bun.lock" | "pnpm-lock.yaml", requested = OWN_MODULES) {
   const root = mkdtempSync(join(tmpdir(), "repo-kit-render-"));
   temps.push(root);
-  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "demo", private: true, scripts: {} }, null, 2));
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "demo", private: true, type: "commonjs", scripts: {} }, null, 2));
   writeFileSync(join(root, lockfile), "");
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root });
-  const result = plan({ root, detection: detect(root), modules: ownModules(), requested: OWN_MODULES });
+  const result = plan({ root, detection: detect(root), modules: ownModules(), requested });
   execute(root, result);
   const written = result.actions.flatMap((action) => (action.kind === "create" ? [action.path] : []));
   return { root, result, written };
@@ -75,11 +74,11 @@ describe.each(["bun.lock", "pnpm-lock.yaml"] as const)("rendering the modules in
     const { root } = renderInto(lockfile);
     execFileSync("git", ["add", "-A"], { cwd: root });
 
-    const docs = spawnSync("node", [join(root, "scripts/check-docs.ts"), "--root", root], { encoding: "utf8" });
-    expect(docs.stderr).not.toContain("need fixing");
+    const docs = spawnSync("node", [join(root, "scripts/check-docs.mts"), "--root", root], { encoding: "utf8" });
+    expect(docs.stderr).toBe("");
     expect(docs.status).toBe(0);
 
-    const lint = spawnSync(ACTIONLINT, [".github/workflows/changelog.yml"], { cwd: root, encoding: "utf8" });
+    const lint = spawnSync("actionlint", [".github/workflows/changelog.yml"], { cwd: root, encoding: "utf8" });
     expect(lint.stdout).toBe("");
     expect(lint.status).toBe(0);
   });
@@ -98,7 +97,30 @@ test("the changelog fragment written by the README example passes the check", ()
   mkdirSync(join(root, "changelog.d"), { recursive: true });
   const example = /```md\n([\s\S]*?)```/.exec(read(root, "changelog.d/README.md"))?.[1] ?? "";
   writeFileSync(join(root, "changelog.d/fix-empty-search.md"), example);
-  const run = spawnSync("node", [join(root, "scripts/changelog.ts"), "check", "--root", root], { encoding: "utf8" });
-  expect(run.stderr).not.toContain("need fixing");
+  const run = spawnSync("node", [join(root, "scripts/changelog.mts"), "check", "--root", root], { encoding: "utf8" });
+  expect(run.stderr).toBe("");
   expect(run.status).toBe(0);
+});
+
+describe("text that belongs to another module", () => {
+  const noChangelog = "no-changelog";
+
+  test("disappears when that module is not selected", () => {
+    const { root } = renderInto("bun.lock", ["agent-loops", "env", "supply-chain"]);
+    expect(read(root, "AGENTS.md")).not.toContain("changelog.d");
+    expect(read(root, ".agents/skills/ship/SKILL.md")).not.toContain(noChangelog);
+    expect(read(root, ".github/dependabot.yml")).not.toContain(noChangelog);
+    expect(read(root, ".agents/skills/ship/SKILL.md")).not.toContain("All checks pass");
+  });
+
+  test("labels every Dependabot pull request no-changelog when the changelog check runs", () => {
+    const { root } = renderInto("pnpm-lock.yaml");
+    const config = Bun.YAML.parse(read(root, ".github/dependabot.yml"));
+    const updates: { labels?: string[] }[] =
+      typeof config === "object" && config !== null && "updates" in config && Array.isArray(config.updates) ? config.updates : [];
+    expect(updates.map((update) => update.labels)).toEqual([
+      ["dependencies", noChangelog],
+      ["dependencies", noChangelog],
+    ]);
+  });
 });

@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { type Counts, type Ratchet, runRatchet } from "../../../skill/modules/quality/templates/scripts/debt-ratchet.ts";
+import { type Counts, type Ratchet, runRatchet } from "../../../skill/modules/quality/templates/scripts/type-ratchet.mts";
 import { removeTempDirs, tempDir } from "../../helpers/render-module.ts";
 
 afterEach(removeTempDirs);
 
-function setup(initial: Counts | null) {
+function setup(initial: Counts | null, suggestedChecks = ["strict"]) {
   const baselinePath = join(tempDir(), "tools/ratchet/baseline.json");
   let current: Counts = {};
   const log: string[] = [];
@@ -14,7 +14,7 @@ function setup(initial: Counts | null) {
     script: "ratchet",
     baselinePath,
     noun: "errors",
-    suggestedChecks: ["strict"],
+    suggestedChecks,
     finishedStep: (check) => `turn ${check} on`,
     count: (checks) => Object.fromEntries(checks.map((check) => [check, current[check] ?? {}])),
   };
@@ -37,6 +37,12 @@ function setup(initial: Counts | null) {
 }
 
 describe("without a baseline", () => {
+  test("passes when there is nothing left to hold, as in a repo with every strict option on", () => {
+    const ratchet = setup(null, []);
+    expect(ratchet.run({})).toBe(0);
+    expect(existsSync(ratchet.baselinePath)).toBe(false);
+  });
+
   test("fails and prints the command that starts one", () => {
     const ratchet = setup(null);
     expect(ratchet.run({})).toBe(1);

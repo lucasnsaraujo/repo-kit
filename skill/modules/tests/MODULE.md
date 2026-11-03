@@ -8,8 +8,8 @@
   - `test`: `vitest run`.
   - `test:changed`: runs the tests that cover files changed since `origin/<default-branch>`. It first checks `git merge-base`, because when the diff fails vitest finds no tests and exits 0, which would report a pass that never ran.
   - `test:related`: `vitest related --run <files>`, for the tests that import the given files.
-  - `smoke`: `node scripts/smoke.ts`.
-- `scripts/smoke.ts` with `scripts/smoke.config.json`: starts the app with `start` (and `env`), polls `healthUrl` until it answers 2xx (stopping early if the app exits), runs each HTTP check (`url`, `method`, expected `status`, optional `bodyIncludes`), stops the app's process group, writes `.artifacts/smoke.json` with every result and the last 50 lines of app output, and exits 1 on any failure.
+  - `smoke`: `node scripts/smoke.mts`.
+- `scripts/smoke.mts` with `scripts/smoke.config.json`: starts the app with `start` (and `env`), polls `healthUrl` until it answers 2xx (stopping early if the app exits), runs each HTTP check (`url`, `method`, expected `status`, optional `bodyIncludes`), stops the app's process group, writes `.artifacts/smoke.json` with every result and the last 50 lines of app output, and exits 1 on any failure.
 - `.gitignore` gains `.artifacts/`. Dev dependency: `vitest`.
 
 ## Tailor

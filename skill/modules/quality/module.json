@@ -9,13 +9,10 @@
       "path": "knip.json"
     },
     {
-      "path": "scripts/check-lint-rules.ts"
+      "path": "scripts/check-lint-rules.mts"
     },
     {
-      "path": "scripts/debt-ratchet.ts"
-    },
-    {
-      "path": "scripts/type-ratchet.ts"
+      "path": "scripts/type-ratchet.mts"
     },
     {
       "path": "tools/biome/rules/no-snapshot-assertions.grit"
@@ -54,14 +51,20 @@
     "check:staged": "biome check --write --staged --files-ignore-unknown=true --no-errors-on-unmatched",
     "typecheck": "tsc --noEmit",
     "knip": "knip",
-    "types:ratchet": "node scripts/type-ratchet.ts",
-    "check:lint-rules": "node scripts/check-lint-rules.ts"
+    "types:ratchet": "node scripts/type-ratchet.mts",
+    "check:lint-rules": "node scripts/check-lint-rules.mts"
   },
   "lines": [
     {
       "path": ".gitignore",
-      "lines": ["node_modules/"]
+      "lines": [
+        "node_modules/"
+      ]
     }
   ],
-  "devDependencies": ["@biomejs/biome", "knip", "typescript"]
+  "devDependencies": [
+    "@biomejs/biome",
+    "knip",
+    "typescript"
+  ]
 }

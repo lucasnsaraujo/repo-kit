@@ -1,16 +1,16 @@
 // Shared by collect.ts, compose-prompt.ts and publish.ts. Standard library only: the workflow
 // runs these files from a copy taken out of the base commit, outside the pull request checkout.
 
-export const BOT_LOGIN = "github-actions[bot]";
+const BOT_LOGIN = "github-actions[bot]";
 export const REVIEW_MARKER = "<!-- ai-review -->";
 export const FAILURE_MARKER = "<!-- ai-review-failure -->";
 const STATE_MARKER = /<!-- ai-review-state:([A-Za-z0-9+/=]*) -->/g;
 
-export const PRIORITIES = ["P0", "P1", "P2", "P3"] as const;
-export type Priority = (typeof PRIORITIES)[number];
+const PRIORITIES = ["P0", "P1", "P2", "P3"] as const;
+type Priority = (typeof PRIORITIES)[number];
 
-export const STATUSES = ["NEW", "REMAINS", "RESOLVED", "WITHDRAWN"] as const;
-export type FindingStatus = (typeof STATUSES)[number];
+const STATUSES = ["NEW", "REMAINS", "RESOLVED", "WITHDRAWN"] as const;
+type FindingStatus = (typeof STATUSES)[number];
 
 /** A finding as the state carries it from one review to the next. */
 export type StoredFinding = {
@@ -46,6 +46,8 @@ export type ReviewMeta = {
   scope: ReviewScope;
   previous: ReviewState | null;
   responsesReadAt: string;
+  /** Author responses this run passed to the reviewer. A withdrawal needs at least one. */
+  responseCount: number;
 };
 
 /** An ISO timestamp in GitHub's format (no milliseconds), so it compares as a string with `created_at`. */
@@ -88,7 +90,7 @@ function isOneOf<T extends string>(options: readonly T[], value: unknown): value
   return options.some((option) => option === value);
 }
 
-export function readStoredFinding(value: unknown, where: string): StoredFinding {
+function readStoredFinding(value: unknown, where: string): StoredFinding {
   if (!isRecord(value)) throw new Error(`${where} must be an object`);
   if (!isOneOf(PRIORITIES, value.priority))
     throw new Error(`${where}.priority must be one of ${PRIORITIES.join(", ")}`);

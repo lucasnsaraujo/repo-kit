@@ -20,20 +20,20 @@ Done when you know the pull request, its head SHA, and who can post rebuttals.
 
 ## Step 1: read the newest review
 
-1. Load only the newest AI review comment: the newest comment from `github-actions` whose body contains `## Findings`.
+1. Load only the newest AI review comment: the newest comment from `github-actions` whose body starts with `## AI review`. The workflow posts a new comment for each review.
 
    ```sh
-   gh pr view <pr> --json comments --jq '[.comments[] | select((.author.login | startswith("github-actions")) and (.body | contains("## Findings")))] | last | {url, createdAt, body}'
+   gh pr view <pr> --json comments --jq '[.comments[] | select((.author.login | startswith("github-actions")) and (.body | startswith("## AI review")))] | last | {url, createdAt, body}'
    ```
 
-2. Check that it is fresh: it names the head SHA (short or full), or it was posted after the last push. Read the `AI review` status on the head SHA:
+2. Check that it is fresh: the footer line that starts ``<sub>Commit `` names the first 12 characters of the head SHA, and, when you asked for a recheck with a comment, it was posted after that comment. A body starting `## AI review did not complete` is a failed run: read its reason and stop as step 6 says. Read the `AI review` status on the head SHA:
 
    ```sh
-   gh api repos/{owner}/{repo}/commits/<head-sha>/status --jq '.statuses[] | select(.context == "AI review") | .state'
+   gh api repos/{owner}/{repo}/commits/<head-sha>/status --jq '.statuses[] | select(.context == "AI review") | {state, description}'
    ```
 
-   `pending`, or a comment older than the last push, means the review still runs: wait (step 5, item 4) and read again.
-3. Read `## Findings` and, when present, `## Withdrawn Findings` together. A finding line starts with `**[NEW]` or `**[REMAINS]`; note its title, priority, and `path:line`.
+   The workflow posts this status only when a review finishes, as `success` or `failure`. No status yet, or a comment for an older commit, means the review still runs: wait as step 5, item 4 says, and read again.
+3. Read the sections `### Findings` and `### Withdrawn findings` together; `### Resolved since the previous review` lists what your last round closed. Each finding is a numbered line such as `1. **[NEW][P1] Title** - path:line`, with the label `NEW` or `REMAINS` and a priority from `P0` to `P3`. Note the title, priority, and `path:line` of each.
 
 Done when you hold every finding of a fresh review. Leave the review comment as the bot wrote it.
 
@@ -93,7 +93,7 @@ One round is one new review. Ask for exactly one:
 1. **Fixes to push:** post the rebuttal comment first, without `/ai-review`: `gh pr comment <pr> --body-file <file>`. Then `git push`. The push re-runs the review, and the review reads every comment posted since the last one.
 2. **Nothing to push:** start the rebuttal comment with `/ai-review` and post it. That comment re-runs the review.
 3. **Nothing to rebut and fixes to push:** push. The push re-runs the review.
-4. Wait for a new review comment and an `AI review` status on the new head SHA that is no longer `pending`. Poll at most once every 2 minutes; a review takes minutes, not seconds. Between polls, check `gh pr view <pr> --json mergeable` as the `ship` skill says: a conflicting pull request starts no workflow.
+4. Wait for a new review comment for the current head SHA, and for the `AI review` status on that SHA. Poll at most once every 2 minutes; a review takes minutes, not seconds. Between polls, check `gh pr view <pr> --json mergeable` as the `ship` skill says: a conflicting pull request starts no workflow.
 
 Done when a fresh review exists for the current head SHA.
 
@@ -101,14 +101,14 @@ Done when a fresh review exists for the current head SHA.
 
 Go back to step 1 with the ledger from the last round:
 
-- A finding gone from `## Findings` needs no more work.
+- A finding listed under `### Resolved since the previous review`, or gone from `### Findings`, needs no more work.
 - A withdrawn finding stays closed. When new code brings the same problem back for a new reason, treat it as new.
 - A `[REMAINS]` finding needs a fix or a stronger rebuttal. Name the part of your last rebuttal the reviewer could not verify, and give better evidence.
 
 Stop, clean, when both hold:
 
-- `## Findings` lists nothing, or only findings the reviewer has withdrawn.
-- The `AI review` status on the head SHA is `success`, when the repository posts one.
+- `### Findings` says `No actionable findings.`
+- The `AI review` status on the head SHA is `success`.
 
 Stop and hand back to the developer when the same finding returns twice with no progress, when a valid finding needs a product decision, or when the review fails or posts output you cannot parse.
 

@@ -28,9 +28,9 @@ A local review costs less than an AI review round.
 4. Run the focused checks from `AGENTS.md` "Checks" for the changed files.
 {%if module:changelog%}
 5. When a user can see the change, add `changelog.d/<branch>.md` as `changelog.d/README.md` says. Otherwise plan to add the `no-changelog` label in gate 2.
-6. Commit the fixes through the pre-commit hook. When it fails, fix the cause and commit again.
+6. Commit the fixes. When a commit hook fails, fix the cause and commit again.
 {%else%}
-5. Commit the fixes through the pre-commit hook. When it fails, fix the cause and commit again.
+5. Commit the fixes. When a commit hook fails, fix the cause and commit again.
 {%endif%}
 
 Done when every finding is fixed or recorded as not valid, and the focused checks pass.
@@ -59,11 +59,15 @@ Gates 3 to 5 wait on GitHub. `{%defaultBranch%}` can move during the wait. GitHu
 
 Run the `babysit` skill on the pull request. It owns triage, fixes, rebuttals, and re-review requests. Apply "While you wait" during each of its waits.
 
-Done when `babysit` reports a clean review on the current head SHA, and the `AI review` status on that SHA is `success` when the repository posts one.
+Done when `babysit` reports a clean review on the current head SHA, and the `AI review` status on that SHA is `success`.
 
 ## Gate 4: make CI green
 
-The required check is `All checks pass`.
+{%if module:ci%}
+The required check is `All checks pass`, which waits for every other job.
+{%else%}
+The required checks are the ones `gh pr checks <pr> --required` lists.
+{%endif%}
 
 1. Watch the head SHA: `gh pr checks <pr> --watch --interval 120`, in the background, checking `mergeable` at each wake.
 2. For each failed job, read only its failed log: `gh run view <run-id> --log-failed`. Find the cause.
@@ -72,14 +76,14 @@ The required check is `All checks pass`.
 5. A merge conflict: merge `origin/{%defaultBranch%}` into the branch, resolve the conflicts, run the focused checks, and push. The history stays as it is: a plain push, never a rebase or force-push. Return to gate 3.
 6. Answer each open human review thread. A thread someone else opened stays open until they resolve it.
 
-A test changes only when the behaviour it guards changes on purpose. Done when `All checks pass` is `success` on the head SHA.
+A test changes only when the behaviour it guards changes on purpose. Done when every required check is `success` on the head SHA.
 
 ## Gate 5: merge
 
 Merge only when all of these hold on the same head SHA:
 
 - `gh pr view <pr> --json mergeStateStatus,headRefOid` shows `CLEAN`.
-- `All checks pass` is `success`, and so is `AI review` when present.
+- Every required check is `success`, and so is `AI review`.
 - No valid AI review finding is open, and no human thread waits for an answer.
 
 Then merge:
@@ -109,7 +113,7 @@ Hand back to the developer when:
 | Local review | N fixed, M not valid | commit SHAs |
 | Pull request | opened | URL |
 | AI review | clean after N rounds | review comment link |
-| CI | `All checks pass` success | run link |
+| CI | required checks success | run link |
 | Merge | merged | merge commit SHA |
 
 Then one line per check you ran locally, and one line for what you left to CI.

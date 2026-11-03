@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { countErrorsByFile, pendingOptions } from "../../../skill/modules/quality/templates/scripts/type-ratchet.ts";
+import { countErrorsByFile, pendingOptions } from "../../../skill/modules/quality/templates/scripts/type-ratchet.mts";
 import { applyModules, removeTempDirs, writeFiles } from "../../helpers/render-module.ts";
 
 afterEach(removeTempDirs);
@@ -44,7 +44,7 @@ describe("type-ratchet script", () => {
       }),
       "src/list.ts": "const items: string[] = [];\nexport const first: string = items[0];\n",
     });
-    const ratchet = (...args: string[]) => spawnSync("node", ["scripts/type-ratchet.ts", ...args], { cwd: project, encoding: "utf8" });
+    const ratchet = (...args: string[]) => spawnSync("node", ["scripts/type-ratchet.mts", ...args], { cwd: project, encoding: "utf8" });
 
     const started = ratchet("--add=noUncheckedIndexedAccess");
     expect(started.status).toBe(0);
@@ -61,13 +61,32 @@ describe("type-ratchet script", () => {
     expect(regressed.stdout).toContain("src/list.ts: 2 type errors under noUncheckedIndexedAccess, baseline allows 1");
   });
 
+  test("passes without a baseline when the tsconfig already turns every strict option on", () => {
+    const project = applyModules({ lockfile: "bun.lock", modules: ["quality"], linkNodeModules: true });
+    const strictOptions = {
+      strict: true,
+      noUncheckedIndexedAccess: true,
+      exactOptionalPropertyTypes: true,
+      noPropertyAccessFromIndexSignature: true,
+      noImplicitOverride: true,
+      noImplicitReturns: true,
+      noFallthroughCasesInSwitch: true,
+    };
+    writeFiles(project, {
+      "tsconfig.json": JSON.stringify({ compilerOptions: { ...strictOptions, noEmit: true }, include: ["src"] }),
+      "src/a.ts": "export {};\n",
+    });
+    const result = spawnSync("node", ["scripts/type-ratchet.mts"], { cwd: project, encoding: "utf8" });
+    expect(result.status).toBe(0);
+  });
+
   test("refuses to add an option the tsconfig already turns on", () => {
     const project = applyModules({ lockfile: "bun.lock", modules: ["quality"], linkNodeModules: true });
     writeFiles(project, {
       "tsconfig.json": JSON.stringify({ compilerOptions: { strict: true, noImplicitOverride: true, noEmit: true }, include: ["src"] }),
       "src/a.ts": "export {};\n",
     });
-    const result = spawnSync("node", ["scripts/type-ratchet.ts", "--add=noImplicitOverride"], { cwd: project, encoding: "utf8" });
+    const result = spawnSync("node", ["scripts/type-ratchet.mts", "--add=noImplicitOverride"], { cwd: project, encoding: "utf8" });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("noImplicitOverride is not a strict option");
   });

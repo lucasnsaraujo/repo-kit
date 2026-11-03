@@ -16,8 +16,8 @@ import {
   readStateMarker,
 } from "./state.ts";
 
-export type PreviousReview = { commentId: number; createdAt: string; state: ReviewState };
-export type AuthorResponse = { login: string; createdAt: string; body: string };
+type PreviousReview = { commentId: number; createdAt: string; state: ReviewState };
+type AuthorResponse = { login: string; createdAt: string; body: string };
 
 export type ReviewContext = {
   title: string;

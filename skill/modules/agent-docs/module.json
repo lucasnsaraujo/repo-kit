@@ -1,7 +1,7 @@
 {
   "id": "agent-docs",
   "summary": "AGENTS.md skeleton, CLAUDE.md import, a shared .agents/skills folder, and a check for broken doc links and AGENTS.md size.",
-  "files": [{ "path": "AGENTS.md" }, { "path": "CLAUDE.md" }, { "path": ".agents/skills/README.md" }, { "path": "scripts/check-docs.ts" }],
+  "files": [{ "path": "AGENTS.md" }, { "path": "CLAUDE.md" }, { "path": ".agents/skills/README.md" }, { "path": "scripts/check-docs.mts" }],
   "symlinks": [{ "path": ".claude/skills", "target": "../.agents/skills" }],
-  "packageScripts": { "check:docs": "node scripts/check-docs.ts" }
+  "packageScripts": { "check:docs": "node scripts/check-docs.mts" }
 }

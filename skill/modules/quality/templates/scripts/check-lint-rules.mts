@@ -1,6 +1,6 @@
 // Proves each GritQL rule in tools/biome/rules flags exactly the lines its fixture marks.
 //
-//   node scripts/check-lint-rules.ts
+//   node scripts/check-lint-rules.mts
 //
 // A rule's fixture is tools/biome/fixtures/<rule>.ts (or .tsx). Every line where the rule must
 // report ends in `// flag`, on the line where the reported code starts; every other line is a case

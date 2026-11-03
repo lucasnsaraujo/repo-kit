@@ -2,7 +2,7 @@
 // scripts/smoke.config.json and writes .artifacts/smoke.json. Exits 1 when the app never became
 // healthy or any check failed.
 //
-//   node scripts/smoke.ts [--config=path/to/smoke.config.json]
+//   node scripts/smoke.mts [--config=path/to/smoke.config.json]
 //
 // The wait polls the health URL and stops early when the app process exits, so a crash fails in
 // seconds instead of at the timeout.

@@ -2,13 +2,13 @@
 
 ## Sets up
 
-- `.github/workflows/ai-review.yml`: three jobs. `authorize` filters the event and checks permissions, `review` runs Claude Code headless with no write token, `publish` posts the comment and the `AI review` commit status from a base-commit copy of the kit.
-- Triggers: every push to a same-repository, non-draft pull request; a pull request comment containing `/ai-review` from someone with admin or write access (forks included).
+- `.github/workflows/ai-review.yml`: `authorize` filters the event and checks permissions, `review` runs Claude Code headless with no write token, `publish` posts the comment and the `AI review` commit status from a base-commit copy of the kit. `skip-dependabot` marks Dependabot's own pushes `AI review: success` ("Not reviewed: dependency update by Dependabot"): those runs get no secrets, so they cannot be reviewed, and a required status would hold them forever. A human push to a Dependabot branch is reviewed as usual.
+- Triggers: every push to a same-repository, non-draft pull request; a pull request comment with a line that starts with `/ai-review`, from someone with admin or write access (forks included). Quoting the bot's comment does not start a run.
 - `.github/ai-review/prompt.md`: the reviewer's instructions. `schema.json`: the structured output it must return.
 - `.github/ai-review/rules/*.md`: domain rules with `include:` globs; a rule joins the prompt only when the pull request touches a matching file. Ships `tests.md`, `security.md`, `migrations.md`.
-- `.github/ai-review/compose-prompt.ts`: builds the trusted system prompt (prompt, `AGENTS.md` files from the base commit, matching rules, review scope) and the untrusted user message (title, description, diff, previous findings, author responses).
+- `.github/ai-review/compose-prompt.ts`: builds the trusted system prompt (prompt, `AGENTS.md` files from the base commit, matching rules, review scope) and the untrusted user message (title, description, diff, previous findings, author responses). It also writes each changed file's diff and its fork-point version under a folder outside the checkout. The reviewer's only tools are Read, Grep and Glob over the checkout and that folder: no shell, no git. Diffs read `.gitattributes` from the base commit, so a pull request cannot hide a file as binary.
 - `.github/ai-review/collect.ts`: reads the previous review's state and the author responses from the pull request comments.
-- `.github/ai-review/publish.ts`: validates the result, renders the comment, replaces the older one, sets the status.
+- `.github/ai-review/publish.ts`: validates the result, renders the comment, replaces the older one, sets the status. A review that finishes after a newer push publishes nothing.
 - `state.ts`, `github.ts`: shared types, the state marker and the REST client. All scripts are stdlib-only and run as `node <file>.ts` on Node 24. `.github/ai-review/package.json` marks them as ES modules, so a root `"type": "commonjs"` cannot break them.
 - Model `claude-opus-5-5` at effort `high`, overridable with the repository variables `AI_REVIEW_MODEL` and `AI_REVIEW_EFFORT`. Gate mode with `AI_REVIEW_GATE=true`; otherwise advisory.
 
@@ -27,8 +27,8 @@ Other tools (the `babysit` skill) rely on these. Change them only together with 
   P1 <exact finding title>: wrong, <guard or contract> at `path/to/file.ts:42`.
   ```
 
-  An assertion, a promise to fix later or a disagreement about priority keeps the finding as REMAINS.
-- **Re-running**: a push re-runs the review on its own and reads every rebuttal posted since the last review, so post the rebuttal first, then push, without `/ai-review`. With nothing to push, include `/ai-review` in the rebuttal to ask for a recheck. A run takes about 3 to 15 minutes and stops at 15.
+  An assertion, a promise to fix later or a disagreement about priority keeps the finding as REMAINS. `publish.ts` accepts a withdrawal only when the run had at least one author response, and RESOLVED or WITHDRAWN only for a finding the previous review listed as active.
+- **Re-running**: a push re-runs the review on its own and reads every rebuttal posted since the last review, so post the rebuttal first, then push, with no `/ai-review` line. With nothing to push, put `/ai-review` at the start of its own line in the rebuttal to ask for a recheck. A run takes about 3 to 15 minutes and stops at 15. A recheck that finishes after a newer push posts nothing and leaves the status alone; the push's own review covers the new head.
 
 Read the latest state from a shell:
 
@@ -68,27 +68,10 @@ gh api "repos/{owner}/{repo}/issues/comments/$id" --jq .body \
    gh variable set AI_REVIEW_GATE --body false
    ```
 
-3. After a week or two of reviews, once the P0/P1 findings have proven right, turn the gate on and require the status on the default branch. The ruleset adds the requirement without touching existing branch protection. Rulesets on private repositories need a paid plan. Fork pull requests get no automatic review, so a maintainer comments `/ai-review` on them before they can merge.
+3. After a week or two of reviews, once the P0/P1 findings have proven right, turn the gate on. Requiring the `AI review` status on the default branch is part of the `ci` module's single branch-protection owner step, which lists `AI review` when this module is selected; run that step rather than adding a second rule here. Fork pull requests get no automatic review, so a maintainer comments `/ai-review` on them before they can merge.
 
    ```sh
    gh variable set AI_REVIEW_GATE --body true
-   gh api --method POST "repos/{owner}/{repo}/rulesets" --input - <<'EOF'
-   {
-     "name": "AI review gate",
-     "target": "branch",
-     "enforcement": "active",
-     "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
-     "rules": [
-       {
-         "type": "required_status_checks",
-         "parameters": {
-           "strict_required_status_checks_policy": false,
-           "required_status_checks": [{ "context": "AI review" }]
-         }
-       }
-     ]
-   }
-   EOF
    ```
 
 4. Optional: pick another model or effort.
@@ -101,14 +84,15 @@ gh api "repos/{owner}/{repo}/issues/comments/$id" --jq .body \
 ## Verify
 
 - `actionlint .github/workflows/ai-review.yml` prints nothing and exits 0.
-- `node .github/ai-review/compose-prompt.ts --base HEAD~1 --head HEAD` (Node 22.18 or later) prints the instructions, then `## Repository instructions` when an `AGENTS.md` exists, `## Domain rules` when the last commit touched a rule's files, `## Review scope` with `Review the whole pull request`, and after `===== user message (stdin) =====` a `## PR context` with the diff inlined.
+- `node .github/ai-review/compose-prompt.ts --base HEAD~1 --head HEAD --files /tmp/ai-review-files` (Node 22.18 or later, git 2.40 or later) prints the instructions, then `## Repository instructions` when an `AGENTS.md` exists, `## Domain rules` when the last commit touched a rule's files, `## Review scope` with `Review the whole pull request` and the folder paths, and after `===== user message (stdin) =====` a `## PR context` with the diff inlined. `/tmp/ai-review-files/pr/` holds one `<path>.diff` per changed file.
 - `node .github/ai-review/compose-prompt.ts --check-rules` lists a match count for every rule.
-- On a real pull request: within 15 minutes of a push, the Actions run `AI review` is green, the pull request has one comment from `github-actions[bot]` starting with `## AI review`, and `gh pr checks <number>` lists `AI review`. A comment with `/ai-review` starts a new run that replaces the comment.
+- On a real pull request: within 15 minutes of a push, the Actions run `AI review` is green, the pull request has one comment from `github-actions[bot]` starting with `## AI review`, and `gh pr checks <number>` lists `AI review`. A comment whose first line is `/ai-review` starts a new run that replaces the comment.
 
 ## Prior art
 
 - **openbot** `.github/workflows/norbiai-review.yml`, `scripts/compose-review-prompt.ts`, `.github/review/*.md`: prompt, composer and rule fragments read from the base commit; `AGENTS.md` per touched directory; incremental scope since the last reviewed commit, only when it sits between base and head; NEW/REMAINS/RESOLVED/WITHDRAWN with a withdrawn ledger; rebuttals only from people who can merge, checked once per login and failing closed; a private concurrency group per comment run; post-new-then-delete-old comments; a commit status instead of a check run, because comment runs attach their checks to the default branch. Departures: state travels as a base64 JSON marker instead of markdown sections parsed back with awk; the reviewer returns schema-checked JSON (`--json-schema`) instead of markdown; `publish.ts` carries the withdrawn ledger and any previous finding the reviewer skipped, instead of trusting the model to repeat them; GitHub-hosted runners with a subscription token instead of a self-hosted runner; no label trigger, so there is one way to ask for a recheck.
 - **astral-sh/uv** `pull-request-code-quality-review.yml`: the model runs in a job without write permissions and an output schema; a separate job with the write token posts the result.
 - **DataDog/documentation** `claude_review.yml`: the gate is a commit status; third-party actions pinned by commit SHA.
-- **anthropics/claude-code-action** `docs/security.md`: only users with write access can trigger runs; `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` keeps secrets out of tool subprocesses; no `pull_request_target` checkout of pull request code.
+- **anthropics/claude-code-action** `docs/security.md`: only users with write access can trigger runs; `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` keeps secrets out of tool subprocesses; no `pull_request_target` checkout of pull request code. Departure from openbot's Bash allow list: Claude Code's permissions docs (code.claude.com/docs/en/permissions) say its built-in read-only commands (`cat`, `find`, read-only `git`) run without a prompt in every mode, so the reviewer gets no Bash at all and `permissions.blockReadsOutsideWorkingDirectories` keeps Read, Grep and Glob inside the checkout and the diff folder.
+- **GitHub Dependabot docs** (troubleshooting Dependabot on GitHub Actions): Dependabot's `pull_request` runs get no secrets and a read-only token that the `permissions` key can raise, which is how `skip-dependabot` reports its status without a `pull_request_target` trigger.
 - **Codex code review**: the P0 to P3 scale, with merge blocked only on P0 and P1.

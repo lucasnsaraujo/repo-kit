@@ -5,7 +5,7 @@
 - `AGENTS.md`: the root guidance every agent reads: communication, non-negotiables, commands, scoped checks, test policy, PR rules, and a pointer table. Sections for release notes and env settings appear when the `changelog` and `env` modules are selected.
 - `CLAUDE.md`: one line, `@AGENTS.md`, so Claude Code and every other agent read the same file.
 - `.agents/skills/README.md` and the symlink `.claude/skills -> ../.agents/skills`: one skills folder for all agents.
-- `scripts/check-docs.ts` and the `check:docs` script: fail on a broken relative link or `#anchor` in any tracked `.md` file, and on an AGENTS.md over its line budget (root 300, nested 150).
+- `scripts/check-docs.mts` and the `check:docs` script: fail on a broken relative link or `#anchor` in any tracked `.md` file, and on an AGENTS.md over its line budget (root 300, nested 150).
 
 ## Tailor
 
@@ -26,6 +26,7 @@ None.
 - `wc -l AGENTS.md` prints at most 300; 80 to 150 is the target for a filled skeleton.
 - `grep -c "fill:" AGENTS.md` prints `0`.
 - `cat CLAUDE.md` prints `@AGENTS.md`.
+- With the `hooks` module: `grep -c "Every commit passes the pre-commit hook" AGENTS.md` prints `1`, and `grep -n "no-verify" AGENTS.md` prints only that rule's line. A filled AGENTS.md that tells agents to skip the hook fails this check.
 - `readlink .claude/skills` prints `../.agents/skills`.
 - `<pm> run check:docs` exits 0 and prints `Checked links in N Markdown files and the AGENTS.md budgets.`
 - Break a link on purpose (`[x](nope.md)` in any tracked `.md`, staged with `git add`): `check:docs` exits 1 and names the file and line. Revert it.

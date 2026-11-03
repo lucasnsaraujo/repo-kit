@@ -3,9 +3,9 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { checkDocs } from "../../../skill/modules/agent-docs/templates/scripts/check-docs.ts";
+import { checkDocs } from "../../../skill/modules/agent-docs/templates/scripts/check-docs.mts";
 
-const SCRIPT = resolve(import.meta.dirname, "../../../skill/modules/agent-docs/templates/scripts/check-docs.ts");
+const SCRIPT = resolve(import.meta.dirname, "../../../skill/modules/agent-docs/templates/scripts/check-docs.mts");
 const temps: string[] = [];
 afterEach(() => {
   for (const dir of temps.splice(0)) rmSync(dir, { recursive: true, force: true });

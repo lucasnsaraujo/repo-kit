@@ -15,7 +15,8 @@ concurrency:
 
 jobs:
   # Picks which lanes a pull request needs. Each output is named after the job it gates, and the
-  # "All checks pass" job accepts a skipped job only when its lane here is false.
+  # "All checks pass" job accepts a skipped job only when its lane here is false. Jobs without a
+  # lane (docs, secrets) run on every change.
   changes:
     name: Pick lanes
     runs-on: ubuntu-latest
@@ -23,7 +24,6 @@ jobs:
     outputs:
       check: ${{ steps.lanes.outputs.check }}
       test: ${{ steps.lanes.outputs.test }}
-      docs: ${{ steps.lanes.outputs.docs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,11 +42,10 @@ jobs:
           # lane. A path that matches no lane and is not INERT also runs every lane, so a file nobody
           # classified can never skip a check. A new lane also needs an entry under outputs above.
           SHARED='^(package\.json|bun\.lock|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig[^/]*\.json|biome\.jsonc?|knip\.jsonc?|\.nvmrc|\.node-version|\.github/)'
-          INERT='^(LICENSE|\.gitignore|\.gitattributes|\.editorconfig)$'
+          INERT='(^|/)(LICENSE|\.gitignore|\.gitattributes|\.editorconfig)$|\.(md|mdx)$'
           declare -A LANES=(
             [check]='\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json|jsonc|css|grit)$'
             [test]='\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json)$'
-            [docs]='\.(md|mdx)$'
           )
           # ---- end lanes ----
 
@@ -141,10 +140,10 @@ jobs:
 {%endif%}
 {%if module:agent-docs%}
 
+  # Runs on every change: the docs check also follows links to code files, so renaming a
+  # linked .ts file must fail here too.
   docs:
     name: Docs
-    needs: changes
-    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

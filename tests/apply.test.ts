@@ -185,6 +185,18 @@ describe("adopt, check and remove", () => {
     expect(readLock(project)?.modules).toEqual(["base"]);
   });
 
+  test("remove drops the module's untouched scripts and re-renders files that mentioned it", () => {
+    const { project, modulesDir, modules, run } = setup();
+    write(modulesDir, "base/templates/BASE.md", "{%if module:ci%}\nci is on\n{%endif%}\nrun {%pmRun%} test\n");
+    run(["ci"]);
+    expect(read(project, "BASE.md")).toBe("ci is on\nrun bun run test\n");
+
+    remove(project, "ci", modules);
+    const pkg = JSON.parse(read(project, "package.json"));
+    expect(pkg.scripts).toEqual({ lint: "eslint ." });
+    expect(read(project, "BASE.md")).toBe("run bun run test\n");
+  });
+
   test("refuses package managers it has no templates for", () => {
     const { modules } = setup();
     const project = tempDir();

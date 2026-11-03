@@ -37,4 +37,4 @@ jobs:
         env:
           BRANCH: ${{ github.head_ref }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
-        run: node scripts/changelog.ts check --base HEAD^1 --branch "$BRANCH" --labels "$LABELS"
+        run: node scripts/changelog.mts check --base HEAD^1 --branch "$BRANCH" --labels "$LABELS"

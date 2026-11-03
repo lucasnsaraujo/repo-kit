@@ -22,17 +22,44 @@ env:
   EFFORT: ${{ vars.AI_REVIEW_EFFORT || 'high' }}
 
 jobs:
+  # Dependabot's `pull_request` runs get no secrets, so they cannot be reviewed, and a required
+  # `AI review` status would hold them forever. Their token is read-only by default; `permissions`
+  # raises it, which is all this job needs. It checks out nothing.
+  skip-dependabot:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+    steps:
+      - name: Report the dependency update as not reviewed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state=success \
+            -f context="AI review" \
+            -f description="Not reviewed: dependency update by Dependabot" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            > /dev/null
+
   authorize:
-    # Push runs: same-repository, non-draft pull requests only. A fork's `pull_request` run gets
-    # neither secrets nor a write token. Comment runs: a pull request comment with `/ai-review`;
-    # the association is a cheap pre-filter, the permission lookup below is the real check.
+    # Push runs: same-repository, non-draft pull requests, not pushed by Dependabot. A fork's
+    # `pull_request` run gets neither secrets nor a write token. Comment runs: a pull request comment
+    # with a line that starts with `/ai-review`, so quoting the bot's comment asks for nothing. The
+    # association is a cheap pre-filter; the permission lookup below is the real check.
     if: >-
       (github.event_name == 'pull_request' &&
         github.event.pull_request.head.repo.full_name == github.repository &&
-        github.event.pull_request.draft == false) ||
+        github.event.pull_request.draft == false &&
+        github.actor != 'dependabot[bot]') ||
       (github.event_name == 'issue_comment' &&
         github.event.issue.pull_request != null &&
-        contains(github.event.comment.body, '/ai-review') &&
+        contains(format('{0}{1}', fromJSON('"\n"'), github.event.comment.body), format('{0}/ai-review', fromJSON('"\n"'))) &&
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -169,21 +196,25 @@ jobs:
           TRIGGER_COMMENT_ID: ${{ github.event.comment.id }}
         run: node "$AI_REVIEW_KIT/collect.ts" --out "$RUNNER_TEMP/ai-review-context.json"
 
+      # Writes every diff the reviewer needs as files, so the reviewer runs without a shell or git.
+      # The diffs read .gitattributes from the base commit, so the pull request cannot hide a file as binary.
       - name: Compose the prompt
         run: >-
           node "$AI_REVIEW_KIT/compose-prompt.ts"
           --base "$BASE_SHA" --head "$HEAD_SHA"
           --context "$RUNNER_TEMP/ai-review-context.json"
           --out "$AI_REVIEW_OUT"
+          --files "$RUNNER_TEMP/ai-review-files"
 
       # Claude Code runs inside the pull request's checkout, so nothing there may configure it:
-      # `--setting-sources user` skips the project's settings and hooks, `--strict-mcp-config` loads
-      # no MCP server. The tools only read; in `dontAsk` mode every Bash command outside the allow
-      # list is refused, and the deny rules close the git options that write or read outside the repo.
+      # `--setting-sources user` skips the project's settings, hooks and CLAUDE.md, `--strict-mcp-config`
+      # loads no MCP server. Its only tools are Read, Grep and Glob, limited to the checkout and the
+      # prepared diffs: no Bash, because `dontAsk` still runs Claude Code's built-in read-only commands.
       - name: Review
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
+          DISABLE_AUTOUPDATER: "1"
         run: |
           set +e
           timeout 900 claude --print \
@@ -195,10 +226,10 @@ jobs:
             --no-session-persistence \
             --strict-mcp-config \
             --setting-sources user \
+            --settings '{"permissions":{"blockReadsOutsideWorkingDirectories":true}}' \
             --permission-mode dontAsk \
-            --tools Read,Grep,Glob,Bash \
-            --allowedTools 'Bash(git diff:*)' 'Bash(git show:*)' 'Bash(git log:*)' 'Bash(git ls-files:*)' \
-            --disallowedTools 'Bash(*--output*)' 'Bash(*--no-index*)' 'Bash(*--ext-diff*)' \
+            --tools Read,Grep,Glob \
+            --add-dir "$RUNNER_TEMP/ai-review-files" \
             < "$AI_REVIEW_OUT/user-message.md" > "$AI_REVIEW_OUT/result.json"
           exit_code=$?
           echo "$exit_code" > "$AI_REVIEW_OUT/exit-code"

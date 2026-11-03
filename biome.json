@@ -17,5 +17,10 @@
     "rules": {
       "preset": "recommended"
     }
+  },
+  "markdown": {
+    "formatter": {
+      "enabled": false
+    }
   }
 }

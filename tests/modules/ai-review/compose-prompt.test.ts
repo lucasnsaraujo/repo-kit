@@ -1,15 +1,31 @@
-import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { afterEach, describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import type { ReviewContext } from "../../../skill/modules/ai-review/templates/.github/ai-review/collect.ts";
 import {
   agentDocPaths,
   capSections,
   chooseScope,
+  compose,
   diffSection,
   matchesGlob,
   parseRule,
   selectRules,
 } from "../../../skill/modules/ai-review/templates/.github/ai-review/compose-prompt.ts";
+import type { ReviewState } from "../../../skill/modules/ai-review/templates/.github/ai-review/state.ts";
+
+const temps: string[] = [];
+afterEach(() => {
+  for (const dir of temps.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+function tempDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "ai-review-"));
+  temps.push(dir);
+  return dir;
+}
 
 describe("glob matching", () => {
   test.each([
@@ -85,26 +101,12 @@ describe("repository instructions", () => {
 });
 
 describe("review scope", () => {
-  const base = "b".repeat(40);
-  const reviewed = "r".repeat(40);
-  const head = "h".repeat(40);
-  const history = new Set([`${reviewed}>${head}`, `${base}>${reviewed}`, `${base}>${head}`]);
-  const isAncestor = (ancestor: string, descendant: string) => ancestor === descendant || history.has(`${ancestor}>${descendant}`);
-
-  test("reviews only the new commits when the last reviewed commit sits between base and head", () => {
-    expect(chooseScope({ baseSha: base, headSha: head, reviewedSha: reviewed, isAncestor })).toEqual({
-      kind: "since",
-      reviewedSha: reviewed,
-    });
-  });
-
-  test("falls back to the full PR without a previous review, after a force-push, or after the base moved past it", () => {
-    expect(chooseScope({ baseSha: base, headSha: head, reviewedSha: null, isAncestor })).toEqual({ kind: "full" });
-    expect(chooseScope({ baseSha: base, headSha: head, reviewedSha: "f".repeat(40), isAncestor })).toEqual({ kind: "full" });
-    const newBase = "n".repeat(40);
-    const rebased = (ancestor: string, descendant: string) =>
-      isAncestor(ancestor, descendant) || (ancestor === newBase && descendant === head);
-    expect(chooseScope({ baseSha: newBase, headSha: head, reviewedSha: reviewed, isAncestor: rebased })).toEqual({ kind: "full" });
+  test("falls back to the full PR without a previous review or after a force-push", () => {
+    const forkPoint = "b".repeat(40);
+    const head = "h".repeat(40);
+    const isAncestor = (ancestor: string, descendant: string) => ancestor === descendant || (ancestor === forkPoint && descendant === head);
+    expect(chooseScope({ forkPoint, headSha: head, reviewedSha: null, isAncestor })).toEqual({ kind: "full" });
+    expect(chooseScope({ forkPoint, headSha: head, reviewedSha: "f".repeat(40), isAncestor })).toEqual({ kind: "full" });
   });
 });
 
@@ -112,15 +114,99 @@ describe("diff section", () => {
   const diff = "diff --git a/src/a.ts b/src/a.ts\n+const fence = '```';\n";
 
   test("inlines a diff under the limit inside a fence longer than any backtick run in it", () => {
-    const section = diffSection({ diff, files: ["src/a.ts"], command: "git diff b...h", limitBytes: 10_000 });
+    const section = diffSection({ diff, files: ["src/a.ts"], perFileDir: "/review/pr", limitBytes: 10_000 });
     expect(section).toContain(diff);
     expect(section).toContain("````diff\n");
   });
 
-  test("lists the files to read one at a time when the diff is over the limit", () => {
-    const section = diffSection({ diff, files: ["src/a.ts", "src/b.ts"], command: "git diff b...h", limitBytes: 10 });
+  test("points to the per-file diffs, one at a time, when the diff is over the limit", () => {
+    const section = diffSection({ diff, files: ["src/a.ts", "src/b.ts"], perFileDir: "/review/pr", limitBytes: 10 });
     expect(section).not.toContain("const fence");
-    expect(section).toContain("- src/a.ts\n- src/b.ts");
-    expect(section).toContain("git diff b...h -- <path>");
+    expect(section).toContain("- `/review/pr/src/a.ts.diff`\n- `/review/pr/src/b.ts.diff`");
+  });
+});
+
+describe("composing from a repository", () => {
+  function repository() {
+    const dir = tempDir();
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], {
+        cwd: dir,
+        encoding: "utf8",
+      }).trim();
+    git("init", "-q", "-b", "main");
+    const commit = (files: Record<string, string>, message: string) => {
+      for (const [path, content] of Object.entries(files)) {
+        mkdirSync(dirname(join(dir, path)), { recursive: true });
+        writeFileSync(join(dir, path), content);
+      }
+      git("add", "-A");
+      git("commit", "-q", "-m", message);
+      return git("rev-parse", "HEAD");
+    };
+    return { dir, git, commit };
+  }
+
+  function context(reviewedSha: string | null): ReviewContext {
+    const previous: ReviewState | null = reviewedSha ? { version: 1, reviewedSha, active: [], withdrawn: [] } : null;
+    return {
+      title: "t",
+      body: "",
+      previous: previous ? { commentId: 1, createdAt: "2026-01-01T00:00:00Z", state: previous } : null,
+      responses: [],
+      omittedResponses: 0,
+      readAt: "2026-01-01T00:00:00Z",
+    };
+  }
+
+  /** main: fork point, then moves on. pr: a reviewed commit, then one more. */
+  function reviewedBranch() {
+    const repo = repository();
+    repo.commit({ "src/a.ts": "one\n" }, "fork point");
+    repo.git("checkout", "-q", "-b", "pr");
+    const reviewed = repo.commit({ "src/a.ts": "two\n" }, "reviewed");
+    repo.git("checkout", "-q", "main");
+    const movedBase = repo.commit({ "docs/b.md": "main moved\n" }, "main moved");
+    repo.git("checkout", "-q", "pr");
+    const head = repo.commit({ "src/a.ts": "three\n" }, "after the review");
+    return { ...repo, reviewed, movedBase, head };
+  }
+
+  test("reviews only the new commits when the base branch moved on after the last review", () => {
+    const { dir, reviewed, movedBase, head } = reviewedBranch();
+    const { meta } = compose({ repoDir: dir, base: movedBase, head, context: context(reviewed), filesDir: tempDir() });
+    expect(meta.scope).toEqual({ kind: "since", reviewedSha: reviewed });
+  });
+
+  test("reviews the whole pull request again once the base branch is merged into it", () => {
+    const { dir, git, reviewed, movedBase } = reviewedBranch();
+    git("merge", "-q", "--no-edit", "main");
+    const head = git("rev-parse", "HEAD");
+    const { meta } = compose({ repoDir: dir, base: movedBase, head, context: context(reviewed), filesDir: tempDir() });
+    expect(meta.scope).toEqual({ kind: "full" });
+  });
+
+  test("writes each changed file's diff and its fork-point version where the reviewer can read them", () => {
+    const { dir, reviewed, movedBase, head } = reviewedBranch();
+    const filesDir = tempDir();
+    const { systemPrompt } = compose({ repoDir: dir, base: movedBase, head, context: context(reviewed), filesDir });
+    expect(readFileSync(join(filesDir, "pr/src/a.ts.diff"), "utf8")).toContain("-one\n+three");
+    expect(readFileSync(join(filesDir, "since/src/a.ts.diff"), "utf8")).toContain("-two\n+three");
+    expect(readFileSync(join(filesDir, "base/src/a.ts"), "utf8")).toBe("one\n");
+    expect(existsSync(join(filesDir, "pr/docs/b.md.diff"))).toBe(false);
+    expect(systemPrompt).toContain(join(filesDir, "pr"));
+    expect(systemPrompt).toContain(join(filesDir, "since"));
+  });
+
+  test("a .gitattributes added by the pull request cannot hide its diff as binary", () => {
+    const { dir, git, commit } = repository();
+    const base = commit({ "src/a.ts": "export const a = 1;\n" }, "base");
+    git("checkout", "-q", "-b", "pr");
+    const head = commit({ "src/a.ts": "export const a = 2;\n", ".gitattributes": "* -diff\n" }, "hide the diff");
+    const filesDir = tempDir();
+    const { userMessage } = compose({ repoDir: dir, base, head, context: context(null), filesDir });
+    expect(userMessage).toContain("+export const a = 2;");
+    expect(userMessage).not.toContain("Binary files");
+    expect(readFileSync(join(filesDir, "pr/src/a.ts.diff"), "utf8")).toContain("+export const a = 2;");
   });
 });

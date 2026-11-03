@@ -34,7 +34,7 @@ Run the narrowest check that covers your change, one at a time. CI owns the full
 3. Types: <!-- fill: `{%pmRun%} typecheck`, or the per-package command in a monorepo. -->
 4. Docs: after you edit Markdown, run `{%pmRun%} check:docs`. It fails on a broken relative link or anchor, and on an AGENTS.md longer than its budget (300 lines at the root, 150 nested).
 {%if module:hooks%}
-5. Commit through the pre-commit hook: it runs `check:staged` on the staged files. When it fails, fix the cause and commit again; `--no-verify` is off limits.
+5. Every commit passes the pre-commit hook, which runs `check:staged` on the staged files. When the hook fails, fix the cause and commit again. Only the developer decides to bypass it (`--no-verify`).
 {%endif%}
 
 A change is done when the tests that cover it pass, the changed files lint and type-check clean, and your report lists the checks you ran and the checks you left to CI.

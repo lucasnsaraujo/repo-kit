@@ -1,11 +1,11 @@
 // Release notes live in one `changelog.d/<branch>.md` file per pull request, so two pull requests
 // never edit the same lines of CHANGELOG.md. See changelog.d/README.md for the fragment format.
 //
-//   node scripts/changelog.ts check                          validate every fragment
-//   node scripts/changelog.ts check --base <rev> [--labels <json array | a,b>] [--branch <name>]
+//   node scripts/changelog.mts check                          validate every fragment
+//   node scripts/changelog.mts check --base <rev> [--labels <json array | a,b>] [--branch <name>]
 //                                                            also require this change to add notes,
 //                                                            unless it has the no-changelog label
-//   node scripts/changelog.ts release <version> [--date YYYY-MM-DD]
+//   node scripts/changelog.mts release <version> [--date YYYY-MM-DD]
 //                                                            fold every fragment into CHANGELOG.md
 
 import { execFileSync } from "node:child_process";
@@ -217,7 +217,7 @@ function main(): void {
   }
 
   console.error(
-    "Usage: changelog.ts check [--base <rev>] [--labels <list>] [--branch <name>] | release <version> [--date YYYY-MM-DD]",
+    "Usage: changelog.mts check [--base <rev>] [--labels <list>] [--branch <name>] | release <version> [--date YYYY-MM-DD]",
   );
   process.exitCode = 2;
 }

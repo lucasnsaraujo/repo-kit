@@ -1,15 +1,28 @@
-// The baseline rules shared by every ratchet script, such as type-ratchet.ts.
+// Holds each strict TypeScript option that tsconfig does not turn on yet to the error count it
+// would cause in each file, as recorded in tools/ratchet/types.json.
 //
-// A baseline file holds, for each check, the count of findings in each file. A file whose count
-// rises above its baseline fails, so new debt stops before the old debt is paid. A count that
-// drops also fails until `--write` lowers the baseline, so the baseline stays tight and a later
-// regression cannot hide in the slack. `--write` never raises a count: raising one is a hand edit
-// of the baseline file that a reviewer sees in the diff. `--add=<check>` starts a check at its
-// current counts. A check with no findings left fails with its finishing step, such as turning
-// the option on and deleting the check from the baseline.
+//   node scripts/type-ratchet.mts                       fails on new errors and on stale counts
+//   node scripts/type-ratchet.mts --write               lowers the baseline after a fix
+//   node scripts/type-ratchet.mts --add=<option>        starts holding another option
+//   node scripts/type-ratchet.mts --project=<tsconfig>  checks this project instead (repeatable)
+//
+// Each held option runs `tsc --noEmit --pretty false --<option>` once per project. Once an option has no errors left, turn it on in tsconfig.json and
+// delete its key from the baseline.
 
+// The baseline rules: a file whose count rises above its baseline fails, so new debt stops before
+// the old debt is paid. A count that drops also fails until `--write` lowers the baseline, so a
+// later regression cannot hide in the slack. `--write` never raises a count: raising one is a hand
+// edit of the baseline that a reviewer sees in the diff. `--add=<option>` starts holding an option
+// at its current counts. An option with no errors left fails until it is turned on and deleted
+// from the baseline. With every strict option already on there is nothing to hold, and it passes.
+//
+// The script is self-contained (no sibling imports) so any tsconfig that includes scripts/ can
+// typecheck it. Copy runRatchet into another script to ratchet a different count.
+
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /** Findings by check name, then by file path. */
 export type Counts = Record<string, Record<string, number>>;
@@ -29,7 +42,7 @@ export type Ratchet = {
   baselinePath: string;
   /** What one finding is, in the plural: `type errors`. */
   noun: string;
-  /** Checks to suggest when no baseline exists yet. */
+  /** Checks to suggest when no baseline exists yet; none means nothing to hold, which passes. */
   suggestedChecks: string[];
   /** What to do once a check has no findings left. */
   finishedStep: (check: string) => string;
@@ -77,7 +90,7 @@ function startChecks(baseline: Counts, current: Counts, checks: string[]): Count
 }
 
 function sortCounts(counts: Counts): Counts {
-  const sortKeys = <T>(record: Record<string, T>) =>
+  const sortKeys = <T,>(record: Record<string, T>) =>
     Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)));
   return sortKeys(Object.fromEntries(Object.entries(counts).map(([check, files]) => [check, sortKeys(files)])));
 }
@@ -111,6 +124,10 @@ export function runRatchet(ratchet: Ratchet, args: string[], log: (line: string)
   const stored = readBaseline(ratchet.baselinePath);
 
   if (stored === null && added.length === 0) {
+    if (ratchet.suggestedChecks.length === 0) {
+      log(`Nothing to hold: no baseline at ${ratchet.baselinePath} and no check left to start.`);
+      return 0;
+    }
     const adds = ratchet.suggestedChecks.map((check) => `--add=${check}`).join(" ");
     log(`No baseline at ${ratchet.baselinePath}. Start one with: ${ratchet.script} ${adds}`);
     return 1;
@@ -147,3 +164,94 @@ export function runRatchet(ratchet: Ratchet, args: string[], log: (line: string)
   for (const check of finished) log(`${check}: no ${ratchet.noun} left. ${ratchet.finishedStep(check)}`);
   return worse.length > 0 || better.length > 0 || finished.length > 0 ? 1 : 0;
 }
+
+const STRICT_OPTIONS = [
+  "strict",
+  "noUncheckedIndexedAccess",
+  "exactOptionalPropertyTypes",
+  "noPropertyAccessFromIndexSignature",
+  "noImplicitOverride",
+  "noImplicitReturns",
+  "noFallthroughCasesInSwitch",
+];
+
+const ERROR_LINE = /^(.+?)\(\d+,\d+\): error TS\d+: /;
+
+/** Error counts by file in `tsc --pretty false` output; the same error printed twice counts once. */
+export function countErrorsByFile(output: string): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const line of new Set(output.split("\n"))) {
+    const file = ERROR_LINE.exec(line)?.[1];
+    if (file === undefined) continue;
+    const path = file.replaceAll("\\", "/");
+    counts[path] = (counts[path] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** The strict options that `tsc --showConfig` output does not turn on. */
+export function pendingOptions(showConfig: string): string[] {
+  const parsed: { compilerOptions?: Record<string, unknown> } = JSON.parse(showConfig);
+  const options = parsed.compilerOptions ?? {};
+  return STRICT_OPTIONS.filter((option) => options[option] !== true);
+}
+
+function tscBinary(root: string): string {
+  const local = join(root, "node_modules/.bin/tsc");
+  return existsSync(local) ? local : "tsc";
+}
+
+function runTsc(root: string, args: string[]): { output: string; status: number | null } {
+  const result = spawnSync(tscBinary(root), args, { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+  if (result.error) throw result.error;
+  return { output: `${result.stdout}${result.stderr}`, status: result.status };
+}
+
+function countOption(root: string, projects: string[], option: string): Record<string, number> {
+  const errorLines = new Set<string>();
+  for (const project of projects) {
+    const { output, status } = runTsc(root, ["-p", project, "--noEmit", "--pretty", "false", `--${option}`]);
+    const lines = output.split("\n").filter((line) => ERROR_LINE.test(line));
+    if (status !== 0 && lines.length === 0)
+      throw new Error(`tsc -p ${project} --${option} failed without file errors:\n${output}`);
+    for (const line of lines) errorLines.add(line);
+  }
+  return countErrorsByFile([...errorLines].join("\n"));
+}
+
+function main(): void {
+  const root = resolve(import.meta.dirname, "..");
+  const args = process.argv.slice(2);
+  const projectArgs = args.flatMap((arg) => (arg.startsWith("--project=") ? [arg.slice("--project=".length)] : []));
+  const projects = projectArgs.length > 0 ? projectArgs : ["tsconfig.json"];
+  const pending = new Set(
+    projects.flatMap((project) => pendingOptions(runTsc(root, ["-p", project, "--showConfig"]).output)),
+  );
+
+  for (const arg of args) {
+    const option = arg.startsWith("--add=") ? arg.slice("--add=".length) : null;
+    if (option !== null && !pending.has(option)) {
+      console.error(
+        `${option} is not a strict option that ${projects.join(", ")} leaves off. Pick from: ${[...pending].join(", ")}`,
+      );
+      process.exit(1);
+    }
+  }
+
+  const code = runRatchet(
+    {
+      script: "node scripts/type-ratchet.mts",
+      baselinePath: join(root, "tools/ratchet/types.json"),
+      noun: "type errors",
+      suggestedChecks: [...pending],
+      finishedStep: (option) =>
+        `Set "${option}": true in tsconfig.json and delete "${option}" from tools/ratchet/types.json.`,
+      count: (options): Counts =>
+        Object.fromEntries(options.map((option) => [option, countOption(root, projects, option)])),
+    },
+    args,
+  );
+  process.exit(code);
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

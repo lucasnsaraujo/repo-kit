@@ -31,10 +31,10 @@ modules/<id>/
 
 | Field | Engine behaviour |
 |---|---|
-| `requires` | Selected automatically, applied first. `remove` refuses while a dependent is selected. |
+| `requires` | Selected automatically, applied first. `remove` refuses while a dependent is selected; after a remove, the other modules' untouched files are re-rendered without it. |
 | `files` | Rendered and written. A file is overwritten only when the kit wrote it and nobody edited it since (hash match). Otherwise the new version lands in `<path>.repo-kit-new` for the agent to merge. `when` takes a template condition. |
 | `symlinks` | Created when the path is free. An existing different path is reported, never replaced. |
-| `packageScripts` | Added when the name is free. A different existing command is reported as `script-conflict`. Values are rendered. |
+| `packageScripts` | Added when the name is free. A different existing command is reported as `script-conflict`. Values are rendered. `remove` deletes the ones still holding the kit's command. |
 | `packageFields` | Top-level `package.json` keys added when absent. |
 | `lines` | Appended to the file when missing (exact line match). Path is rendered. |
 | `devDependencies` | Names only. The plan prints one install command so the package manager picks versions under the project's release-age policy. |
