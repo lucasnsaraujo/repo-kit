@@ -1,0 +1,40 @@
+name: Changelog
+
+# Each pull request writes its release notes in its own changelog.d file. The label events re-run
+# the check when someone adds or removes the no-changelog label.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: changelog-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  notes:
+    name: Release notes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The merge commit and its first parent, the base branch: their diff is the pull request.
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      # Validates every fragment, and requires one in this pull request unless it has the
+      # no-changelog label. The script imports only node: modules, so no install step is needed.
+      - name: Check release notes
+        env:
+          BRANCH: ${{ github.head_ref }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: node scripts/changelog.ts check --base HEAD^1 --branch "$BRANCH" --labels "$LABELS"

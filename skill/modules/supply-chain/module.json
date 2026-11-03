@@ -1,0 +1,9 @@
+{
+  "id": "supply-chain",
+  "summary": "3-day minimum release age, exact versions, an explicit install-script allowlist, and grouped Dependabot updates with a cooldown.",
+  "files": [
+    { "path": "bunfig.toml", "when": "bun" },
+    { "path": "pnpm-workspace.yaml", "when": "pnpm" },
+    { "path": ".github/dependabot.yml" }
+  ]
+}

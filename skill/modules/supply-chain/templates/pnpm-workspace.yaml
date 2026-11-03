@@ -1,0 +1,13 @@
+# Skip versions published less than 3 days ago (4320 minutes). Most malicious releases are found
+# and pulled from the registry within that time.
+minimumReleaseAge: 4320
+# Packages you publish yourself can skip the wait:
+# minimumReleaseAgeExclude:
+#   - "@your-org/*"
+
+# Save exact versions, so the lockfile and package.json agree on what runs.
+saveExact: true
+
+# Only the packages set to true here run install scripts. Add one only when it needs a script to
+# work (a native binary or a platform download), and say why in the pull request.
+allowBuilds: {}

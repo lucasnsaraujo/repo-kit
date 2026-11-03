@@ -1,0 +1,9 @@
+{
+  "id": "changelog",
+  "summary": "Release notes as one changelog.d fragment per pull request, a CI check with a no-changelog label, and a release command that folds them into CHANGELOG.md.",
+  "files": [{ "path": "changelog.d/README.md" }, { "path": "scripts/changelog.ts" }, { "path": ".github/workflows/changelog.yml" }],
+  "packageScripts": {
+    "changelog:check": "node scripts/changelog.ts check",
+    "changelog:release": "node scripts/changelog.ts release"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "env",
+  "summary": "dotenvx: committed, encrypted .env.dev and .env.production, keys in an ignored root .env.keys, typed loader at the app boundary.",
+  "packageScripts": { "env:encrypt": "dotenvx encrypt -f .env.dev -f .env.production -fk .env.keys" },
+  "lines": [{ "path": ".gitignore", "lines": [".env.keys"] }, { "path": ".worktreeinclude", "lines": [".env.keys"] }],
+  "devDependencies": ["@dotenvx/dotenvx"]
+}

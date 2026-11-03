@@ -1,0 +1,38 @@
+version: 2
+updates:
+{%if bun%}
+  - package-ecosystem: bun
+{%else%}
+  # pnpm projects use the npm ecosystem; Dependabot reads pnpm-lock.yaml.
+  - package-ecosystem: npm
+{%endif%}
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Matches the 3-day minimum release age of the package manager, which rejects newer versions.
+    cooldown:
+      default-days: 3
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    # Major versions break APIs: upgrade them on purpose, in their own pull request.
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+
+  # Keeps the SHA-pinned actions in workflows current, with their version comments.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns:
+          - "*"

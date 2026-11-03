@@ -1,0 +1,13 @@
+[install]
+# Save exact versions, so the lockfile and package.json agree on what runs.
+exact = true
+# Skip versions published less than 3 days ago (259200 seconds). Most malicious releases are
+# found and pulled from the registry within that time.
+minimumReleaseAge = 259200
+# Packages you publish yourself can skip the wait. A bare name exempts every version;
+# name@version exempts only that version.
+# minimumReleaseAgeExcludes = ["@your-org/shared", "typescript@5.9.3"]
+
+# `trustedDependencies` in package.json replaces Bun's default allowlist: only the packages
+# listed there run install scripts. Add a package only when it needs a script to work (a native
+# binary or a platform download), and say why in the pull request.

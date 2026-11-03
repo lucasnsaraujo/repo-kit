@@ -1,0 +1,10 @@
+{
+  "id": "agent-loops",
+  "summary": "ship and babysit skills that take a branch through local review, PR, AI review, CI and squash merge, plus a PR template.",
+  "requires": ["agent-docs", "ai-review"],
+  "files": [
+    { "path": ".agents/skills/ship/SKILL.md" },
+    { "path": ".agents/skills/babysit/SKILL.md" },
+    { "path": ".github/pull_request_template.md" }
+  ]
+}
