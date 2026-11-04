@@ -1,6 +1,6 @@
 ---
 name: repo-kit
-description: Set up or update a TypeScript repo's dev workflow from selectable modules - CI, AI review, tests, hooks, env, supply chain, changelog, agent docs and loops.
+description: Set up or update a TypeScript repo's dev workflow from selectable modules - CI, AI review (GitHub Actions or self-hosted OpenCodeReview), tests, hooks, env, supply chain, changelog, agent docs and loops.
 disable-model-invocation: true
 ---
 
@@ -26,6 +26,7 @@ Otherwise show the owner every module with one line each and a default, then ask
 
 - All modules are recommended. Mark a module as "replace" when the repo already has an equivalent (ESLint or Prettier → `quality` replaces them with Biome; Husky or Lefthook → `hooks`; Jest → `tests`; Renovate → `supply-chain` keeps Renovate and skips Dependabot; `.changeset/` → skip `changelog`).
 - `agent-loops` pulls in `agent-docs` and `ai-review`; `hooks` pulls in `quality`.
+- AI review has two alternatives; ask the owner which. `ai-review` (the default) runs in GitHub Actions on the owner's Claude subscription. `opencodereview` is for an owner with a server that stays on: OpenCodeReview runs there in Docker, and the kit only adds its `REVIEW.md`. It leaves out `agent-loops`, whose `babysit` skill reads `ai-review`'s comment. To switch a configured project, `KIT remove` the other one first.
 
 Done when the owner has answered, or has said to use the defaults.
 
@@ -62,7 +63,7 @@ Done when every check passes. A check that cannot run locally (it needs GitHub, 
 
 ## 7. Owner steps and report
 
-Collect every `## Owner steps` entry from the selected modules: secrets (`CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`, `DOTENV_PRIVATE_KEY_PRODUCTION`), variables (`AI_REVIEW_GATE`), labels, and branch protection (required checks `All checks pass` and `AI review`). These change the GitHub repository, so list them numbered with their exact commands and run them only after the owner approves the batch.
+Collect every `## Owner steps` entry from the selected modules: secrets (`CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`, `DOTENV_PRIVATE_KEY_PRODUCTION`), variables (`AI_REVIEW_GATE`), labels, the OpenCodeReview server setup, and branch protection (required checks `All checks pass` and `AI review`). These change the GitHub repository, so list them numbered with their exact commands and run them only after the owner approves the batch.
 
 Commit on the branch in logical steps: one commit for the engine output, then one per tailored module. The final report covers:
 

@@ -24,6 +24,7 @@ function ownModules(): Map<string, LoadedModule> {
     summary: "stub",
     dir: MODULES_DIR,
     requires: [],
+    conflicts: [],
     files: [],
     symlinks: [],
     packageScripts: {},
