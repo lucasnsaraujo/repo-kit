@@ -21,6 +21,7 @@ Plan: 47 files to create, 1 conflict (.github/workflows/ci.yml), 15 scripts, 4 d
 |---|---|
 | `ci` | GitHub Actions with lanes picked from the diff and one required `All checks pass` job that allows a skip only when that lane had nothing to check |
 | `ai-review` | Claude Code reviews each PR with your Claude subscription, posts P0–P3 findings that carry over between pushes, takes rebuttals via `/ai-review`, and gates merge on P0/P1 once you turn the gate on |
+| `opencodereview` | Instead of `ai-review`, for owners with a server: [OpenCodeReview](https://github.com/BridgLabs/opencodereview) runs there in Docker and reviews each PR with evidence-checked findings; the kit writes the `REVIEW.md` it reads and lists the server setup |
 | `quality` | Biome with anti-slop test rules (each proven by fixtures), knip for dead code, and a strict-TypeScript ratchet that only lets error counts go down |
 | `tests` | Vitest with secrets scrubbed from the environment and a temp `HOME`, changed-file runs, and an end-to-end smoke script that writes a JSON report |
 | `hooks` | pre-commit formats and lints staged files, typechecks, runs knip on manifest changes; pre-push runs the changed tests |
@@ -30,7 +31,7 @@ Plan: 47 files to create, 1 conflict (.github/workflows/ci.yml), 15 scripts, 4 d
 | `agent-docs` | An `AGENTS.md` skeleton the skill fills from your repo, `CLAUDE.md` importing it, `.agents/skills` shared with Claude Code, and a check for broken doc links and oversized agent docs |
 | `agent-loops` | `ship` and `babysit` skills that take a branch through local review, PR, AI review, CI and squash merge, plus a PR template |
 
-`agent-loops` pulls in `agent-docs` and `ai-review`; `hooks` pulls in `quality`. Supported: bun and pnpm projects on Node 22.18+.
+`agent-loops` pulls in `agent-docs` and `ai-review`; `hooks` pulls in `quality`. `ai-review` and `opencodereview` are alternatives: `all` picks `ai-review`, and `opencodereview` (which leaves out `agent-loops`) is chosen by name. Supported: bun and pnpm projects on Node 22.18+.
 
 ## Install
 

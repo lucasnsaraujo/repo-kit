@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { adopt, check, execute, LOCK_FILE, plan, readLock, remove } from "./lib/apply.ts";
 import { detect } from "./lib/detect.ts";
-import { loadModules } from "./lib/modules.ts";
+import { loadModules, selectAll } from "./lib/modules.ts";
 
 const USAGE = `Usage: kit.ts <command> [options]
 
@@ -35,7 +35,7 @@ function requestedModules(): string[] {
     console.error("--modules is required (comma-separated ids, or all)");
     process.exit(2);
   }
-  return values.modules === "all" ? [...modules.keys()] : values.modules.split(",").map((id) => id.trim());
+  return values.modules === "all" ? selectAll(modules, readLock(root)?.modules ?? []) : values.modules.split(",").map((id) => id.trim());
 }
 
 /** Plans carry full file contents; the summary keeps the output readable. */
@@ -52,7 +52,7 @@ function summarize(result: ReturnType<typeof plan>) {
 
 switch (command) {
   case "modules":
-    print([...modules.values()].map(({ id, summary, requires }) => ({ id, summary, requires })));
+    print([...modules.values()].map(({ id, summary, requires, conflicts }) => ({ id, summary, requires, conflicts })));
     break;
   case "detect":
     print({ ...detect(root), lock: readLock(root) });

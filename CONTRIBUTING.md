@@ -26,7 +26,7 @@ bun run check      # test, typecheck, lint, actionlint
 2. Write a test first in `tests/modules/<id>/`. It should go red on the bug or missing behaviour.
 3. Change the module. TypeScript script templates hold no template tags, so tests import them directly.
 4. Bump `KIT_VERSION` in `skills/repo-kit/scripts/lib/version.ts` and `version` in `.claude-plugin/plugin.json` when templates change. Projects use the version to tell an update from an edit.
-5. Run `bun run check`. `tests/all-modules.test.ts` applies every module together and requires the result to pass its own Biome check.
+5. Run `bun run check`. `tests/all-modules.test.ts` applies every module together (once with `ai-review`, once with its alternative `opencodereview`) and requires the result to pass its own Biome check.
 
 ## Adding a module
 
