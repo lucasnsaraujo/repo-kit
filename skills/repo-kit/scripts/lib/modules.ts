@@ -79,10 +79,11 @@ export function resolveSelection(
   for (const id of requested) visit(id, null);
   for (const id of ordered) {
     const clash = modules.get(id)?.conflicts.find((other) => ordered.includes(other));
-    if (clash)
-      throw new Error(
-        `${id} and ${clash} cannot be selected together: they are alternatives. Pick one; on a configured project, run \`kit.ts remove ${clash}\` first.`,
-      );
+    if (!clash) continue;
+    const via = addedFor[clash] ? ` (${addedFor[clash]} requires ${clash}; leave ${addedFor[clash]} out)` : "";
+    throw new Error(
+      `${id} and ${clash} cannot be selected together: they are alternatives${via}. Pick one; on a configured project, run \`kit.ts remove ${clash}\` first.`,
+    );
   }
   return { ordered, addedFor };
 }

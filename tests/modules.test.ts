@@ -37,7 +37,7 @@ describe("conflicting modules", () => {
   });
 
   test("a module that pulls in the other alternative fails too", () => {
-    expect(() => resolveSelection(["server-review", "loops"], reviewers)).toThrow(/server-review and review/);
+    expect(() => resolveSelection(["server-review", "loops"], reviewers)).toThrow(/loops requires review; leave loops out/);
   });
 
   test("one alternative alone resolves", () => {
