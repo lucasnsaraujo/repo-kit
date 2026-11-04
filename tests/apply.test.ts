@@ -185,6 +185,12 @@ describe("adopt, check and remove", () => {
     expect(readLock(project)?.modules).toEqual(["base"]);
   });
 
+  test("remove refuses a module the project never recorded", () => {
+    const { project, modules, run } = setup();
+    run(["base"]);
+    expect(() => remove(project, "ci", modules)).toThrow("ci is not recorded");
+  });
+
   test("remove drops the module's untouched scripts and re-renders files that mentioned it", () => {
     const { project, modulesDir, modules, run } = setup();
     write(modulesDir, "base/templates/BASE.md", "{%if module:ci%}\nci is on\n{%endif%}\nrun {%pmRun%} test\n");

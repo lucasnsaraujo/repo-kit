@@ -55,10 +55,14 @@ export function loadModules(modulesDir: string): Map<string, LoadedModule> {
   return modules;
 }
 
-/** Expands the selection with every module it requires, in dependency order. */
+/**
+ * Expands the selection with every module it requires, in dependency order. `recorded` is the
+ * project's previous selection, used only to say which alternative to remove on a conflict.
+ */
 export function resolveSelection(
   requested: string[],
   modules: Map<string, LoadedModule>,
+  recorded: string[] = [],
 ): { ordered: string[]; addedFor: Record<string, string> } {
   const ordered: string[] = [];
   const addedFor: Record<string, string> = {};
@@ -80,10 +84,11 @@ export function resolveSelection(
   for (const id of ordered) {
     const clash = modules.get(id)?.conflicts.find((other) => ordered.includes(other));
     if (!clash) continue;
-    const via = addedFor[clash] ? ` (${addedFor[clash]} requires ${clash}; leave ${addedFor[clash]} out)` : "";
-    throw new Error(
-      `${id} and ${clash} cannot be selected together: they are alternatives${via}. Pick one; on a configured project, run \`kit.ts remove ${clash}\` first.`,
-    );
+    const pulled = [id, clash].find((side) => addedFor[side]);
+    const via = pulled ? ` (${addedFor[pulled]} requires ${pulled})` : "";
+    const installed = [id, clash].find((side) => recorded.includes(side));
+    const hint = installed ? `This project records ${installed}; to switch, run \`kit.ts remove ${installed}\` first.` : "Pick one.";
+    throw new Error(`${id} and ${clash} cannot be selected together: they are alternatives${via}. ${hint}`);
   }
   return { ordered, addedFor };
 }

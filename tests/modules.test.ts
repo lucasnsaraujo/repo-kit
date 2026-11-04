@@ -30,14 +30,23 @@ const reviewers = catalogue([
 ]);
 
 describe("conflicting modules", () => {
-  test("selecting both alternatives fails and names the remove command", () => {
-    expect(() => resolveSelection(["review", "server-review"], reviewers)).toThrow(
-      /server-review and review cannot be selected together.*remove review/,
-    );
+  test("selecting both alternatives on a fresh project fails without a remove hint", () => {
+    const attempt = () => resolveSelection(["review", "server-review"], reviewers);
+    expect(attempt).toThrow(/server-review and review cannot be selected together.*Pick one/);
+    expect(attempt).not.toThrow(/remove/);
   });
 
-  test("a module that pulls in the other alternative fails too", () => {
-    expect(() => resolveSelection(["server-review", "loops"], reviewers)).toThrow(/loops requires review; leave loops out/);
+  test("on a configured project the hint removes the recorded alternative, whichever side declares the conflict", () => {
+    expect(() => resolveSelection(["server-review", "review"], reviewers, ["server-review"])).toThrow(
+      /run `kit.ts remove server-review` first/,
+    );
+    expect(() => resolveSelection(["review", "server-review"], reviewers, ["review"])).toThrow(/run `kit.ts remove review` first/);
+  });
+
+  test("a module that pulls in the other alternative is named", () => {
+    expect(() => resolveSelection(["server-review", "loops"], reviewers, ["server-review"])).toThrow(
+      /loops requires review.*run `kit.ts remove server-review` first/,
+    );
   });
 
   test("one alternative alone resolves", () => {

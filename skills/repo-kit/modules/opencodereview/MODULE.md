@@ -8,7 +8,7 @@ Pick it when the owner has, or will set up, a machine that stays on (a VPS, a ho
 
 - `REVIEW.md`: repository review rules. OpenCodeReview reads `REVIEW.md`, `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md` and `README.md` from the pull request's base commit, so the rules take effect once this file is on the default branch, and a pull request cannot rewrite them.
 - What the server does, for the owner's reference (none of it is configured here):
-  - polls GitHub every 5 minutes through the `gh` CLI and reviews each new pull request and each new push (only what changed since the last review);
+  - polls GitHub through the `gh` CLI, every minute by default (Settings, poll interval), and reviews each new pull request and each new push (only what changed since the last review);
   - runs the AI in locked-down runner containers with a read-only snapshot of the code and network access only to the AI provider;
   - posts a summary comment it updates on each push, and the findings as one non-blocking review with inline comments, from the GitHub account the owner signed in with. It never approves;
   - drops any finding whose quoted code does not match the snapshot exactly, and never calls such a review clean;
@@ -42,15 +42,17 @@ Pick it when the owner has, or will set up, a machine that stays on (a VPS, a ho
 3. **Onboard.** From your machine, tunnel to the UI and open `http://localhost:1421`:
 
    ```sh
-   ssh -N -L 1421:127.0.0.1:1421 <server>
+   ssh -N -L 1421:127.0.0.1:1421 -L 1455:127.0.0.1:1455 <server>
    ```
+
+   The second port carries the ChatGPT browser sign-in, which redirects to `127.0.0.1:1455`; with only Claude, or with the ChatGPT device code, the first is enough.
 
    Sign in to GitHub with an account that can comment on this repository (the reviews are posted as that account), connect a Claude plan (`claude setup-token`, paste the code back) or a ChatGPT plan (`codex login`), and select this repository. Reviews count against that plan's usage limits on every push to every open pull request.
 
 ## Verify
 
 - `grep -n "<!-- fill:" REVIEW.md` prints nothing.
-- After `REVIEW.md` is on the default branch and the owner steps are done, open a pull request. Within about 5 minutes plus the review time, this prints a comment URL:
+- After `REVIEW.md` is on the default branch and the owner steps are done, open a pull request. Within a minute or two plus the review time, this prints a comment URL:
 
   ```sh
   gh api "repos/{owner}/{repo}/issues/<number>/comments" \

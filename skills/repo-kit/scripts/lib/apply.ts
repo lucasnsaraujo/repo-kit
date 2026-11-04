@@ -105,7 +105,7 @@ function symlinkAction(root: string, module: LoadedModule, path: string, target:
 export function plan(input: { root: string; detection: Detection; modules: Map<string, LoadedModule>; requested: string[] }): Plan {
   const lock = readLock(input.root);
   const requested = [...new Set([...(lock?.modules ?? []), ...input.requested])];
-  const { ordered, addedFor } = resolveSelection(requested, input.modules);
+  const { ordered, addedFor } = resolveSelection(requested, input.modules, lock?.modules ?? []);
   const vars = buildVars(input.detection, ordered);
   const pkg: PackageJson = readPackageJson(input.root) ?? {};
   const deps = { ...pkg.dependencies, ...pkg.devDependencies };
@@ -271,6 +271,7 @@ export function remove(
 ): { deleted: string[]; kept: string[]; removedScripts: string[] } {
   const lock = readLock(root);
   if (!lock) throw new Error(`${LOCK_FILE} not found: run apply first`);
+  if (!lock.modules.includes(moduleId)) throw new Error(`${moduleId} is not recorded in ${LOCK_FILE}: nothing to remove`);
   const dependents = lock.modules.filter((id) => id !== moduleId && modules.get(id)?.requires.includes(moduleId));
   if (dependents.length > 0) throw new Error(`cannot remove ${moduleId}: required by ${dependents.join(", ")}`);
   const deleted: string[] = [];
