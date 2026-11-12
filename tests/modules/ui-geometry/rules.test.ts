@@ -9,6 +9,7 @@ import {
   findSmallTargets,
   findUnequalRowHeights,
   measurePage,
+  SCROLL_ATTRIBUTE,
   type Snapshot,
   TRUNCATE_ATTRIBUTE,
 } from "../../../skills/repo-kit/modules/ui-geometry/templates/tests/geometry/geometry.ts";
@@ -30,7 +31,7 @@ async function measure(body: string, width = PHONE, ignore: string[] = []): Prom
     await page.setContent(
       `<!doctype html><html><head><style>body{margin:0;font:16px/1.25 sans-serif}</style></head><body>${body}</body></html>`,
     );
-    return await page.evaluate(measurePage, { ignore, truncateAttribute: TRUNCATE_ATTRIBUTE });
+    return await page.evaluate(measurePage, { ignore, truncateAttribute: TRUNCATE_ATTRIBUTE, scrollAttribute: SCROLL_ATTRIBUTE });
   } finally {
     await page.close();
   }
@@ -87,6 +88,15 @@ describe("small targets", () => {
     expect(findSmallTargets(desktop, 480)).toEqual([]);
   });
 
+  test("measures a checkbox by its label, and flags a bare one", async () => {
+    const labelled = await measure(
+      '<label style="display:flex;align-items:center;min-height:48px"><input type="checkbox" name="terms"> I accept the terms</label>',
+    );
+    expect(findSmallTargets(labelled, 480)).toEqual([]);
+    const bare = await measure('<input type="checkbox" name="terms">');
+    expect(elements(findSmallTargets(bare, 480))).toEqual(['input[name="terms"]']);
+  });
+
   test("passes a native input hidden under a custom control", async () => {
     const snapshot = await measure(
       '<label style="display:block;width:48px;height:48px;position:relative"><input type="checkbox" style="position:absolute;opacity:0;width:16px;height:16px"></label>',
@@ -126,6 +136,13 @@ describe("unequal row heights", () => {
     ]);
   });
 
+  test("passes a logo link taller than the button beside it", async () => {
+    const header = await measure(
+      '<header style="display:flex"><a href="/" style="display:block;height:56px">Logo</a><button style="height:44px">Menu</button></header>',
+    );
+    expect(findUnequalRowHeights(header)).toEqual([]);
+  });
+
   test("passes a row of equal controls, and the same controls stacked in a column", async () => {
     expect(findUnequalRowHeights(await measure(row(44, 44)))).toEqual([]);
     const column = await measure(row(36, 44).replace("display:flex", "display:flex;flex-direction:column"));
@@ -144,10 +161,20 @@ describe("outside the viewport", () => {
     ]);
   });
 
-  test("passes a drawer parked fully off screen, and a card scrolled inside a carousel", async () => {
+  test("flags content wider than a vertical scroll area, which scrolls sideways too", async () => {
+    const snapshot = await measure(
+      '<main style="height:300px;overflow-y:auto"><div style="width:600px;height:20px">Wide table</div></main>',
+      320,
+    );
+    expect(elements(findOutsideViewport(snapshot))).toEqual(['main > div "Wide table"']);
+  });
+
+  test("passes a drawer parked fully off screen, and cards in a carousel that snaps or is marked as one", async () => {
+    const cards = '<div style="flex:0 0 300px;height:40px">One</div><div style="flex:0 0 300px;height:40px">Two</div>';
     const snapshot = await measure(
       '<aside style="position:fixed;left:-300px;width:280px;height:100px">Menu</aside>' +
-        '<div style="display:flex;overflow-x:auto;width:320px"><div style="flex:0 0 300px;height:40px">One</div><div style="flex:0 0 300px;height:40px">Two</div></div>',
+        `<div style="display:flex;overflow-x:auto;scroll-snap-type:x mandatory;width:320px">${cards}</div>` +
+        `<div ${SCROLL_ATTRIBUTE} style="display:flex;overflow-x:auto;width:320px">${cards}</div>`,
       320,
     );
     expect(findOutsideViewport(snapshot)).toEqual([]);
@@ -158,12 +185,14 @@ describe("offender keys", () => {
   test("describe elements by landmark, stable attributes and text with digits masked, and number repeats", async () => {
     const snapshot = await measure(
       '<nav><a href="/inbox?tab=2" style="display:inline-block;width:30px;height:30px">Inbox</a></nav>' +
-        '<button style="width:30px;height:30px">Item 12</button><button style="width:30px;height:30px">Item 7</button>',
+        '<button style="width:30px;height:30px">Item 12</button><button style="width:30px;height:30px">Item 7</button>' +
+        '<button id="radix-12" style="width:30px;height:30px">Open</button>',
     );
     expect(elements(findOffenders(snapshot, { phoneMaxWidth: 480 }).filter((offender) => offender.rule === "small-target"))).toEqual([
       'nav > a[href="/inbox"]',
-      'button "Item ##"',
       'button "Item #"',
+      'button "Item #" (2)',
+      'button "Open"',
     ]);
     const repeated = await measure(
       '<button style="width:30px;height:30px">Edit</button><button style="width:30px;height:30px">Edit</button>',

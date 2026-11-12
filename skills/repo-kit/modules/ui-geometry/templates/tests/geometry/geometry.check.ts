@@ -12,6 +12,7 @@ import {
   type PageResult,
   parseBaseline,
   parseGeometryConfig,
+  SCROLL_ATTRIBUTE,
   TRUNCATE_ATTRIBUTE,
 } from "./geometry";
 
@@ -44,6 +45,7 @@ if (configPath === undefined) {
           const snapshot = await page.evaluate(measurePage, {
             ignore: config.ignore,
             truncateAttribute: TRUNCATE_ATTRIBUTE,
+            scrollAttribute: SCROLL_ATTRIBUTE,
           });
           const result: PageResult = { route: route.path, width, offenders: findOffenders(snapshot, config) };
           if (resultsDir !== undefined) {

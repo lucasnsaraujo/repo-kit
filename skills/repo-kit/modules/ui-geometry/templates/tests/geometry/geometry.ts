@@ -5,13 +5,16 @@
 //
 // `measurePage` is sent to the page as source text, so it must not use anything declared outside it.
 
-export type RuleName =
-  | "page-overflow"
-  | "clipped-text"
-  | "small-target"
-  | "overlapping-targets"
-  | "unequal-row-heights"
-  | "outside-viewport";
+const RULE_NAMES = [
+  "page-overflow",
+  "clipped-text",
+  "small-target",
+  "overlapping-targets",
+  "unequal-row-heights",
+  "outside-viewport",
+] as const;
+
+export type RuleName = (typeof RULE_NAMES)[number];
 
 type Box = { left: number; top: number; right: number; bottom: number };
 
@@ -22,8 +25,10 @@ type MeasuredElement = {
   end: number;
   parent: number;
   box: Box;
+  /** The area a tap lands on: the box, or for a checkbox or radio the larger box of its label. */
+  target: Box;
   interactive: boolean;
-  /** A form control or button-like element that lines up with its siblings; checkboxes and inline links are not. */
+  /** A button, field or select that lines up with its siblings; checkboxes, links and inline elements are not. */
   control: boolean;
   /** An inline link or control inside a sentence, which the target-size rule exempts. */
   inlineInText: boolean;
@@ -36,7 +41,11 @@ type MeasuredElement = {
   clientHeight: number;
   /** Carries the truncation opt-out attribute itself or through an ancestor. */
   truncates: boolean;
-  /** Inside an ancestor below `body` that scrolls or clips horizontally. */
+  /**
+   * Inside an ancestor below `body` that clips horizontally, or that scrolls horizontally on purpose:
+   * with scroll snapping or the scroll attribute. A computed `overflow-x: auto` alone does not count,
+   * because `overflow-y: auto` turns it on too.
+   */
   inScroller: boolean;
 };
 
@@ -48,9 +57,10 @@ export type Snapshot = {
 
 export type Offender = { rule: RuleName; element: string; detail: string };
 
-export type MeasureOptions = { ignore: string[]; truncateAttribute: string };
+export type MeasureOptions = { ignore: string[]; truncateAttribute: string; scrollAttribute: string };
 
 export const TRUNCATE_ATTRIBUTE = "data-geometry-truncate";
+export const SCROLL_ATTRIBUTE = "data-geometry-scroll";
 
 const TOLERANCE_PX = 1;
 const MIN_TARGET_PX = 44;
@@ -59,15 +69,15 @@ export function measurePage(options: MeasureOptions): Snapshot {
   const INTERACTIVE =
     'a[href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"], [role="menuitem"], [tabindex]:not([tabindex="-1"])';
   const CONTROL =
-    'button, select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), [role="button"], a[href]';
+    'button, select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), [role="button"]';
   const LANDMARK = 'header, nav, main, footer, aside, form, dialog, [role="dialog"]';
   const ignore = options.ignore.join(", ");
 
   const clean = (text: string, limit: number) => {
-    const words = text.replace(/\s+/g, " ").trim().replace(/\d/g, "#");
+    const words = text.replace(/\s+/g, " ").trim().replace(/\d+/g, "#");
     return words.length > limit ? `${words.slice(0, limit)}…` : words;
   };
-  const stableId = (id: string) => /^[A-Za-z][\w-]*$/.test(id) && !/\d{3}/.test(id);
+  const stableId = (id: string) => /^[A-Za-z_-]+$/.test(id);
   const name = (el: Element): string => {
     const tag = el.tagName.toLowerCase();
     if (el.id && stableId(el.id)) return `${tag}#${el.id}`;
@@ -95,6 +105,19 @@ export function measurePage(options: MeasureOptions): Snapshot {
   const hasOwnText = (el: Element) =>
     [...el.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? "").trim() !== "");
   const clips = (value: string) => value === "hidden" || value === "clip";
+  const hidesOverflowX = (el: Element) => {
+    const style = getComputedStyle(el);
+    if (clips(style.overflowX)) return true;
+    if (style.overflowX === "visible") return false;
+    return style.scrollSnapType !== "none" || el.hasAttribute(options.scrollAttribute);
+  };
+  const toBox = (rect: DOMRect): Box => ({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+  const area = (box: Box) => (box.right - box.left) * (box.bottom - box.top);
+  const targetBox = (el: Element, own: Box) => {
+    if (!(el instanceof HTMLInputElement) || (el.type !== "checkbox" && el.type !== "radio")) return own;
+    const labels = [...(el.labels ?? [])].map((label) => toBox(label.getBoundingClientRect()));
+    return labels.reduce((best, label) => (area(label) > area(best) ? label : best), own);
+  };
 
   const all = [...document.body.querySelectorAll("*")];
   const position = new Map(all.map((el, index) => [el, index]));
@@ -104,9 +127,8 @@ export function measurePage(options: MeasureOptions): Snapshot {
   all.forEach((el, index) => {
     const style = getComputedStyle(el);
     const parent = el.parentElement;
-    const parentScrolls =
-      parent !== null && parent !== document.body && getComputedStyle(parent).overflowX !== "visible";
-    scrolling.set(el, parentScrolls || (parent !== null && scrolling.get(parent) === true));
+    const parentHides = parent !== null && parent !== document.body && hidesOverflowX(parent);
+    scrolling.set(el, parentHides || (parent !== null && scrolling.get(parent) === true));
 
     if (ignore !== "" && el.closest(ignore)) return;
     if (el.closest("svg") && el.tagName.toLowerCase() !== "svg") return;
@@ -121,7 +143,8 @@ export function measurePage(options: MeasureOptions): Snapshot {
       start: index,
       end: index + el.getElementsByTagName("*").length,
       parent: parent ? (position.get(parent) ?? -1) : -1,
-      box: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
+      box: toBox(rect),
+      target: targetBox(el, toBox(rect)),
       interactive,
       control: interactive && el.matches(CONTROL) && !inline,
       inlineInText: inline && parent !== null && hasOwnText(parent),
@@ -180,8 +203,8 @@ export function findSmallTargets(snapshot: Snapshot, phoneMaxWidth: number): Off
   if (snapshot.viewport.width > phoneMaxWidth) return [];
   return snapshot.elements.flatMap((el): Offender[] => {
     if (!el.interactive || el.inlineInText) return [];
-    if (width(el.box) >= MIN_TARGET_PX && height(el.box) >= MIN_TARGET_PX) return [];
-    const detail = `${px(width(el.box))}x${px(height(el.box))}px, under ${MIN_TARGET_PX}x${MIN_TARGET_PX}px`;
+    if (width(el.target) >= MIN_TARGET_PX && height(el.target) >= MIN_TARGET_PX) return [];
+    const detail = `${px(width(el.target))}x${px(height(el.target))}px, under ${MIN_TARGET_PX}x${MIN_TARGET_PX}px`;
     return [{ rule: "small-target", element: el.descriptor, detail }];
   });
 }
@@ -269,14 +292,7 @@ export type GeometryConfig = {
 export type BaselineEntry = { route: string; width: number; rule: RuleName; element: string };
 export type PageResult = { route: string; width: number; offenders: Offender[] };
 
-const RULES = new Set<string>([
-  "page-overflow",
-  "clipped-text",
-  "small-target",
-  "overlapping-targets",
-  "unequal-row-heights",
-  "outside-viewport",
-]);
+const RULES = new Set<string>(RULE_NAMES);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -353,8 +369,9 @@ export function parsePageResult(raw: unknown): PageResult {
   return { route: raw.route, width: raw.width, offenders };
 }
 
+const pageKey = (page: { route: string; width: number }) => `${page.route} @${page.width}`;
 const entryKey = (entry: { route: string; width: number; rule: string; element: string }) =>
-  `${entry.route} @${entry.width} ${entry.rule} ${entry.element}`;
+  `${pageKey(entry)} ${entry.rule} ${entry.element}`;
 
 export function describeOffender(result: { route: string; width: number }, offender: Offender): string {
   return `${entryKey({ ...result, ...offender })}: ${offender.detail}`;
@@ -369,21 +386,21 @@ export function compareWithBaseline(
   const found = new Set(
     results.flatMap((result) => result.offenders.map((offender) => entryKey({ ...result, ...offender }))),
   );
-  const measured = new Set(results.map((result) => `${result.route} @${result.width}`));
+  const measured = new Set(results.map(pageKey));
   return {
     added: results.flatMap((result) =>
       result.offenders
         .filter((offender) => !known.has(entryKey({ ...result, ...offender })))
         .map((offender) => describeOffender(result, offender)),
     ),
-    fixed: baseline.filter((entry) => measured.has(`${entry.route} @${entry.width}`) && !found.has(entryKey(entry))),
+    fixed: baseline.filter((entry) => measured.has(pageKey(entry)) && !found.has(entryKey(entry))),
   };
 }
 
 /** The baseline with every measured page's entries replaced by what was found there, sorted so diffs stay small. */
 export function updateBaseline(baseline: BaselineEntry[], results: PageResult[]): BaselineEntry[] {
-  const measured = new Set(results.map((result) => `${result.route} @${result.width}`));
-  const kept = baseline.filter((entry) => !measured.has(`${entry.route} @${entry.width}`));
+  const measured = new Set(results.map(pageKey));
+  const kept = baseline.filter((entry) => !measured.has(pageKey(entry)));
   const found = results.flatMap((result) =>
     result.offenders.map((offender) => ({
       route: result.route,

@@ -50,7 +50,7 @@ jobs:
             [check]='\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json|jsonc|css|grit)$'
             [test]='\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json)$'
 {%if module:ui-geometry%}
-            [geometry]='\.(tsx|jsx|css|scss|sass|less|html|svg)$|^tests/geometry/'
+            [geometry]='\.(tsx|jsx|css|scss|sass|less|html|svg)$|^tests/geometry/|^scripts/check-geometry\.mts$|(^|/)playwright\.config\.[cm]?[jt]s$'
 {%endif%}
           )
           # ---- end lanes ----

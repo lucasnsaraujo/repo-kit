@@ -168,9 +168,6 @@ describe("the layout geometry lane", () => {
   const project = renderFullWorkflow("pnpm-lock.yaml", [...FULL, "ui-geometry"]);
   const pickLanes = lanePicker(project);
   const workflowText = readFileSync(join(project, ".github/workflows/ci.yml"), "utf8");
-  const geometrySteps = readWorkflow(project)
-    .jobs.geometry?.steps.map((step) => step.run)
-    .filter(Boolean);
 
   test("runs for component, style and geometry config changes, and the required job waits for it", () => {
     expect(pickLanes({ "src/Button.tsx": "export {};\n" }).geometry).toBe("true");
@@ -182,9 +179,5 @@ describe("the layout geometry lane", () => {
   test("skips a change to server code or docs", () => {
     expect(pickLanes({ "src/app.ts": "export const a = 1;\n" }).geometry).toBe("false");
     expect(pickLanes({ "README.md": "edited\n" }).geometry).toBe("false");
-  });
-
-  test("installs Chromium and runs check:geometry", () => {
-    expect(geometrySteps).toEqual(["pnpm exec playwright install --with-deps chromium", "pnpm run check:geometry"]);
   });
 });

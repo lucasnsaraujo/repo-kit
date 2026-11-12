@@ -64,7 +64,8 @@ function main(): void {
   const baseline = parseBaseline(JSON.parse(readFileSync(baselinePath, "utf8")));
 
   if (run.status !== 0) {
-    console.error(`check:geometry: Playwright exited with ${run.status ?? run.signal}; the baseline was not changed.`);
+    const kept = values.update ? "; the baseline was not changed" : "";
+    console.error(`check:geometry: Playwright exited with ${run.status ?? run.signal}${kept}.`);
     process.exitCode = run.status ?? 1;
     return;
   }
