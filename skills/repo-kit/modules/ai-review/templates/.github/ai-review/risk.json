@@ -8,7 +8,8 @@
       "**/middleware*",
       "**/*permission*",
       "**/*permission*/**",
-      "**/*rbac*"
+      "**/*rbac*",
+      "**/proxy.{ts,js}"
     ],
     "payments": [
       "**/*billing*",
@@ -31,9 +32,31 @@
       "**/schema.prisma",
       "**/drizzle/**",
       "**/db/schema*",
+      "**/db/schema*/**",
       "supabase/**"
     ],
     "secrets": ["**/.env*", "**/env.ts", "**/env.mjs", "**/*secret*", "**/*credential*", "**/*.pem", "**/*.key"],
-    "ci": [".github/**", "**/Dockerfile*", "**/docker-compose*", "**/*.tf", "vercel.json", "netlify.toml", "fly.toml"]
+    "ci": [
+      ".github/**",
+      "**/Dockerfile*",
+      "**/docker-compose*",
+      "**/*.tf",
+      "vercel.json",
+      "netlify.toml",
+      "fly.toml",
+      ".agents/**",
+      ".claude/**",
+      "CLAUDE.md",
+      "**/AGENTS.md"
+    ],
+    "dependencies": [
+      "**/package.json",
+      "**/bun.lock",
+      "**/bun.lockb",
+      "**/pnpm-lock.yaml",
+      "**/pnpm-workspace.yaml",
+      "**/.npmrc",
+      "**/bunfig.toml"
+    ]
   }
 }

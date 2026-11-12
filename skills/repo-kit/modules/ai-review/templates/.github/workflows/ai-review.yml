@@ -155,6 +155,7 @@ jobs:
         id: risk
         env:
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ needs.authorize.outputs.pr_number }}
         run: |
           set -euo pipefail
@@ -175,7 +176,9 @@ jobs:
             exit 0
           fi
           tr '\t' '\n' < "$listing" | sed '/^$/d' > "$RUNNER_TEMP/changed-files.txt"
-          node base/.github/ai-review/risk.ts --files "$RUNNER_TEMP/changed-files.txt"
+          # The last review's open findings: a P0 or P1 keeps the pull request high risk.
+          node base/.github/ai-review/collect.ts --out "$RUNNER_TEMP/ai-review-context.json"
+          node base/.github/ai-review/risk.ts --files "$RUNNER_TEMP/changed-files.txt" --context "$RUNNER_TEMP/ai-review-context.json"
 
   # A pull request that touches no risky area passes without a model run. Someone who can merge can
   # still ask for a review with `/ai-review`.

@@ -20,7 +20,7 @@ Plan: 47 files to create, 1 conflict (.github/workflows/ci.yml), 15 scripts, 4 d
 | Module | What it sets up |
 |---|---|
 | `ci` | GitHub Actions with lanes picked from the diff, one required `All checks pass` job that allows a skip only when that lane had nothing to check, and `ci:local` to run the same checks in order before a push |
-| `ai-review` | Claude Code reviews each PR that touches a risky area (auth, payments, migrations, secrets, CI) with your Claude subscription, posts P0–P3 findings that carry over between pushes, takes rebuttals via `/ai-review`, and gates merge on P0/P1 once you turn the gate on; other PRs pass as low risk |
+| `ai-review` | Claude Code reviews each PR that touches a risky area (auth, payments, migrations, secrets, CI, dependencies) with your Claude subscription, posts P0–P3 findings that carry over between pushes, takes rebuttals via `/ai-review`, and gates merge on P0/P1 once you turn the gate on; other PRs pass as low risk |
 | `quality` | Biome with anti-slop test rules (each proven by fixtures), knip for dead code, and a strict-TypeScript ratchet that only lets error counts go down |
 | `tests` | Vitest with secrets scrubbed from the environment and a temp `HOME`, changed-file runs, and an end-to-end smoke script that writes a JSON report |
 | `hooks` | pre-commit formats and lints staged files, typechecks, runs knip on manifest changes; pre-push runs the changed tests |
@@ -117,7 +117,7 @@ The `ai-review` workflow runs Claude Code headless on a GitHub-hosted runner, si
 - **The reviewer only reads.** It gets `Read`, `Grep` and `Glob` over the checkout and over diffs computed beforehand. It has no shell and no network, and reads outside those folders are blocked. A separate job with a write token posts the comment and the status.
 - **Findings have a lifecycle.** Each one is `NEW`, `REMAINS`, `RESOLVED` or `WITHDRAWN`. State lives in a hidden marker in the bot's own comment, and after the first review only the new commits are reviewed.
 - **You can argue back.** Someone with write access comments `/ai-review` with the concrete reason a finding is wrong. A finding is withdrawn only when the reviewer verifies that reason in the code.
-- **Only risky pull requests are reviewed.** `.github/ai-review/risk.json`, read from the base commit, lists globs for auth, payments, migrations, secrets and CI. A pull request that touches none gets `AI review: success` ("low risk: review not required") without a model run; `/ai-review` still reviews it on request.
+- **Only risky pull requests are reviewed.** `.github/ai-review/risk.json`, read from the base commit, lists globs for auth, payments, migrations, secrets, CI and dependencies. A pull request that touches none, with no P0/P1 left open, gets `AI review: success` ("low risk: review not required") without a model run; `/ai-review` still reviews it on request.
 - **The gate is a commit status.** `AI review` fails on unresolved P0/P1 when `AI_REVIEW_GATE=true`. Until then it only comments.
 
 ## Prior art

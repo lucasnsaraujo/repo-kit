@@ -57,7 +57,7 @@ Gates 3 to 5 wait on GitHub. `{%defaultBranch%}` can move during the wait. GitHu
 
 ## Gate 3: babysit the AI review
 
-The review workflow rates each push by the files the pull request changes (`.github/ai-review/risk.json`: auth, payments, migrations, secrets, CI). Read the rating on the current head SHA once the `AI review` status appears:
+The review workflow rates each push by the files the pull request changes (`.github/ai-review/risk.json`: auth, payments, migrations, secrets, CI, dependencies) and by any P0 or P1 the last review left open. Read the rating on the current head SHA once the `AI review` status appears:
 
 ```sh
 gh api "repos/{owner}/{repo}/commits/<head-sha>/status" --jq '.statuses[] | select(.context == "AI review") | "\(.state) \(.description)"'

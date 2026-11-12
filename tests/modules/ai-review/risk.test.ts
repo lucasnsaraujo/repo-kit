@@ -18,14 +18,22 @@ describe("the shipped risk globs", () => {
     ["auth", "src/lib/auth/session.ts"],
     ["auth", "apps/web/middleware.ts"],
     ["auth", "apps/web/app/(auth)/login/page.tsx"],
+    ["auth", "src/hooks/useAuth.ts"],
+    ["auth", "apps/web/proxy.ts"],
+    ["payments", "src/components/StripeCheckout.tsx"],
     ["payments", "apps/web/app/api/stripe/webhook/route.ts"],
     ["payments", "src/billing/invoice.ts"],
     ["migrations", "db/migrations/0003_add_orders.sql"],
     ["migrations", "packages/db/prisma/schema.prisma"],
+    ["migrations", "src/lib/db/schema/users.ts"],
     ["secrets", ".env.production"],
     ["secrets", "apps/web/src/env.ts"],
     ["ci", ".github/workflows/ci.yml"],
     ["ci", ".github/ai-review/risk.json"],
+    ["ci", ".agents/skills/ship/SKILL.md"],
+    ["dependencies", "package.json"],
+    ["dependencies", "apps/web/package.json"],
+    ["dependencies", "pnpm-lock.yaml"],
   ])("rate a %s change high risk: %s", (category, file) => {
     expect(classifyRisk(shipped, ["README.md", file])).toEqual({ level: "high", matches: [{ category, file }] });
   });
@@ -39,6 +47,11 @@ describe("the shipped risk globs", () => {
 describe("classification", () => {
   test("rates a pull request with no listed files high, since nothing proves it safe", () => {
     expect(classifyRisk(shipped, [])).toEqual({ level: "high", matches: [] });
+  });
+
+  test("rates a pull request high while the last review left a P0 or P1 open", () => {
+    expect(classifyRisk(shipped, ["README.md"], 1).level).toBe("high");
+    expect(classifyRisk(shipped, ["README.md"], 0).level).toBe("low");
   });
 
   test("lists every match so the reason is visible in the run log", () => {
@@ -57,12 +70,17 @@ describe("classification", () => {
 });
 
 describe("command line", () => {
-  function run(files: string[]) {
+  function run(files: string[], context?: unknown) {
     const dir = mkdtempSync(join(tmpdir(), "ai-review-risk-"));
     temps.push(dir);
     writeFileSync(join(dir, "files.txt"), `${files.join("\n")}\n`);
     writeFileSync(join(dir, "output"), "");
-    const result = spawnSync("node", [join(KIT, "risk.ts"), "--files", join(dir, "files.txt")], {
+    const args = ["--files", join(dir, "files.txt")];
+    if (context !== undefined) {
+      writeFileSync(join(dir, "context.json"), JSON.stringify(context));
+      args.push("--context", join(dir, "context.json"));
+    }
+    const result = spawnSync("node", [join(KIT, "risk.ts"), ...args], {
       encoding: "utf8",
       env: { ...process.env, GITHUB_OUTPUT: join(dir, "output") },
     });
@@ -73,6 +91,26 @@ describe("command line", () => {
     const result = run(["src/components/Button.tsx"]);
     expect(result.status).toBe(0);
     expect(result.output).toBe("risk=low\n");
+  });
+
+  test("reads open findings from the collected review context", () => {
+    const finding = { priority: "P1", title: "Token leaks", file: "src/a.ts", line: 3, body: "x" };
+    const context = {
+      title: "t",
+      body: "",
+      previous: {
+        commentId: 1,
+        createdAt: "2026-11-01T00:00:00Z",
+        state: { version: 1, reviewedSha: "a".repeat(40), active: [finding], withdrawn: [] },
+      },
+      responses: [],
+      omittedResponses: 0,
+      readAt: "2026-11-02T00:00:00Z",
+    };
+    const result = run(["src/components/Button.tsx"], context);
+    expect(result.stderr).toBe("");
+    expect(result.output).toBe("risk=high\n");
+    expect(result.stdout).toContain("The last review left 1 P0/P1 findings open.");
   });
 
   test("writes risk=high and names the matching files", () => {
