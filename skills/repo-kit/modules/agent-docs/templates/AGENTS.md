@@ -18,6 +18,10 @@
 ## Commands
 
 `package.json` scripts are the source of truth: read them before you run anything, and run them with `{%pmRun%} <script>`. In a fresh worktree, run `{%installFrozen%}` first.
+{%if module:ci%}
+
+`{%pmRun%} ci:local` runs every check CI runs, in CI's order, and stops at the first failure. Run it before you push a branch you expect to merge without another round.
+{%endif%}
 
 <!-- fill: only what package.json cannot tell: a command that needs a running service, a slow command and its cheap alternative, a required order. Delete this comment when there is nothing to add. -->
 

@@ -19,7 +19,7 @@ Plan: 47 files to create, 1 conflict (.github/workflows/ci.yml), 15 scripts, 4 d
 
 | Module | What it sets up |
 |---|---|
-| `ci` | GitHub Actions with lanes picked from the diff and one required `All checks pass` job that allows a skip only when that lane had nothing to check |
+| `ci` | GitHub Actions with lanes picked from the diff, one required `All checks pass` job that allows a skip only when that lane had nothing to check, and `ci:local` to run the same checks in order before a push |
 | `ai-review` | Claude Code reviews each PR with your Claude subscription, posts P0–P3 findings that carry over between pushes, takes rebuttals via `/ai-review`, and gates merge on P0/P1 once you turn the gate on |
 | `quality` | Biome with anti-slop test rules (each proven by fixtures), knip for dead code, and a strict-TypeScript ratchet that only lets error counts go down |
 | `tests` | Vitest with secrets scrubbed from the environment and a temp `HOME`, changed-file runs, and an end-to-end smoke script that writes a JSON report |

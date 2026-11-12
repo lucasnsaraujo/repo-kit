@@ -10,6 +10,7 @@
 - Job `secrets` ("Secret scan", with `supply-chain`): downloads gitleaks 8.30.1, verifies its sha256, and scans the pull request's commits (`--log-opts=BASE..HEAD`) or, on a push, the full history. It has no lane: it runs on every change.
 - Job `ci-ok` ("All checks pass"): the one check branch protection requires. It runs `if: always()` and fails unless every needed job succeeded; a job may be skipped only when its lane output from `changes` is `false`.
 - `.github/actions/setup/action.yml`: Node from `.nvmrc` or `.node-version` (else the version detected at apply time), the package manager (pnpm reads `packageManager`; Bun reads `packageManager` or `engines.bun`), and `install: frozen` (the default, a frozen-lockfile install) or `install: none`. Any other input value fails the step.
+- `scripts/ci-local.mts` and the `ci:local` script: runs the checks `ci.yml` runs, in its order (`lint`, `typecheck`, `knip`, `types:ratchet`, `check:lint-rules`, `test`, `check:docs`, `check:geometry`), skipping each one `package.json` does not define, and stops at the first failure with its exit code. The secret scan stays in CI.
 - Every action is pinned to a commit SHA with its version in a comment; every job has `timeout-minutes`.
 
 ## Tailor
@@ -17,7 +18,8 @@
 1. **Merge an existing workflow.** When `.github/workflows/ci.yml.repo-kit-new` exists, or other files in `.github/workflows/` run lint, typecheck or tests, move each project-specific step (services, build, extra env, matrix) into the matching job of the new file and delete the duplicate workflow. Done when `ls .github/workflows` shows no second workflow that runs the same checks and no `*.repo-kit-new` from this module remains.
 2. **Fit the lanes to the repository.** Edit only the block between `# ---- lanes: edit these patterns for this repository ----` and `# ---- end lanes ----` in the `changes` job: add generated or vendored folders that affect everything to `SHARED`, add files that need no check to `INERT`, and for a monorepo give each package its own lane (for example `[web]='^apps/web/'`) with a matching job. Every lane needs three things with the same name: a `LANES` entry, an `outputs:` line on `changes`, and a job whose `if:` reads that output and that `ci-ok` lists under `needs`. Done when each job in `ci.yml` except `changes`, `docs`, `secrets` and `ci-ok` has a lane of its own name, and `actionlint` passes.
 3. **Check the toolchain inputs.** For pnpm, `package.json` must have `"packageManager": "pnpm@<version>"` (pnpm/action-setup fails without it). For Bun, add `"packageManager": "bun@<version>"` so CI does not float to the latest Bun. The `quality` scripts run as `node <file>.mts`, which needs Node 22.18 or newer in `.nvmrc`. Done when `jq -r .packageManager package.json` prints a pinned version and `cat .nvmrc` (if present) is 22.18 or newer.
-4. **Add the project's real build and service needs.** If tests need a database, a build step, or secrets, add them to the `test` job (services, `env:` from `secrets.*`). Done when the first CI run on a pull request passes, or fails only on real findings.
+4. **Keep `ci:local` in step with CI.** When you add a job or step that runs another `package.json` script, add that script to `CI_ORDER` in `scripts/ci-local.mts` and adopt the file. Done when every `<pm> run <script>` in `ci.yml` is in `CI_ORDER`.
+5. **Add the project's real build and service needs.** If tests need a database, a build step, or secrets, add them to the `test` job (services, `env:` from `secrets.*`). Done when the first CI run on a pull request passes, or fails only on real findings.
 
 ## Owner steps
 
@@ -52,6 +54,7 @@
 
 ## Verify
 
+- `<pm> run ci:local`: prints `ci:local: <script> passed` for each check and exits 0. Make one check fail on purpose (a lint error): it stops there and exits non-zero without running the later checks.
 - `actionlint .github/workflows/ci.yml`: no output, exit 0.
 - Open a pull request that changes only a `.md` file: "Lint and types" and "Tests" show as skipped and "All checks pass" is green.
 - Open a pull request that changes a `.ts` file: "Lint and types" and "Tests" run, and "All checks pass" goes green only after both pass.
