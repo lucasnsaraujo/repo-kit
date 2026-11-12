@@ -77,6 +77,12 @@ Write the notes for each change a user can see in a new `changelog.d/<branch>.md
 - Read settings through the typed loader <!-- fill: path to the env loader -->. Keep secret values off the screen: no `dotenvx get`, no `echo`.
 {%endif%}
 
+## Map
+
+One line per area: the path, the function to start reading from, and the ADR that explains why it works this way. `{%pmRun%} check:docs` fails when a backticked path here no longer exists.
+
+<!-- fill: one line per area, e.g. - Billing: `src/billing/`, start at `chargeCard` in `src/billing/charge.ts`; ADR `docs/adr/0003-idempotent-charges.md`. List only areas whose entry point one search would not find. -->
+
 ## Where to look
 
 Read the AGENTS.md of each directory you change before you edit it.

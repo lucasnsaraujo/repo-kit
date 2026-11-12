@@ -1,5 +1,6 @@
 // Fails when a tracked Markdown file links to a relative path that does not exist, names a
-// `#anchor` the target Markdown file does not have, or when an AGENTS.md outgrows its line budget.
+// `#anchor` the target Markdown file does not have, when an AGENTS.md outgrows its line budget, or
+// when a backticked path in an AGENTS.md `## Map` section or on an ADR `- Code:` line is gone.
 // Web links and links inside code are not checked.
 //
 //   node scripts/check-docs.mts [--root <dir>] [--root-budget <lines>] [--nested-budget <lines>]
@@ -24,6 +25,8 @@ const ATX_HEADING = /^\s{0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$/;
 const SETEXT_UNDERLINE = /^\s{0,3}(=+|-+)\s*$/;
 const HTML_ANCHOR = /<a\s[^>]*\b(?:id|name)\s*=\s*["']([^"']+)["']/gi;
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+const FILE_EXTENSION =
+  /\.(?:[cm]?[jt]sx?|json[c5]?|mdx?|ya?ml|toml|css|scss|html?|sql|sh|py|go|rs|prisma|graphql|gql|grit|lock|txt)$/i;
 
 /** The anchor GitHub gives a heading: lower case, punctuation dropped, one hyphen per space. */
 function slugHeading(heading: string): string {
@@ -152,6 +155,53 @@ function findLinkProblems(root: string, files: string[]): DocProblem[] {
   return problems;
 }
 
+/**
+ * Backticked tokens that read as repository paths: a slash, or a file extension, so `db.query` and
+ * `chargeCard` stay names. Globs, calls, package names, flags and URLs are skipped; `:line` is dropped.
+ */
+function codePaths(line: string): string[] {
+  return [...line.matchAll(/`([^`\s]+)`/g)]
+    .map((match) => (match[1] ?? "").replace(/:\d+(?::\d+)?$/, ""))
+    .filter((token) => token.includes("/") || FILE_EXTENSION.test(token))
+    .filter((token) => !/[*?(){}<>]|^[@-]/.test(token) && !URL_SCHEME.test(token));
+}
+
+/** Lines of the `## Map` section, up to the next heading of level 1 or 2. */
+function mapLines(lines: string[]): { line: string; index: number }[] {
+  const start = lines.findIndex((line) => /^\s{0,3}##\s+Map\s*#*\s*$/.test(line));
+  if (start === -1) return [];
+  const section: { line: string; index: number }[] = [];
+  for (let index = start + 1; index < lines.length && !/^\s{0,3}#{1,2}\s/.test(lines[index] ?? ""); index += 1)
+    section.push({ line: lines[index] ?? "", index });
+  return section;
+}
+
+/**
+ * Paths an agent is told to open: the `## Map` of each AGENTS.md (resolved from its folder or the
+ * repository root) and the `- Code:` line of each ADR under an `adr/` folder.
+ */
+function findCodePathProblems(root: string, files: string[]): DocProblem[] {
+  const problems: DocProblem[] = [];
+  for (const file of files) {
+    const isAgents = basename(file) === "AGENTS.md";
+    const isAdr = /(^|\/)adr\/[^/]+\.md$/.test(file);
+    if (!isAgents && !isAdr) continue;
+    const lines = proseLines(readFileSync(join(root, file), "utf8"));
+    const checked = isAgents
+      ? mapLines(lines)
+      : lines.flatMap((line, index) => (/^\s*[-*]\s+Code:/.test(line) ? [{ line, index }] : []));
+    const where = isAgents ? "the map" : "the Code line";
+    for (const { line, index } of checked) {
+      for (const path of codePaths(line)) {
+        const candidates = [join(root, dirname(file), path), join(root, path)];
+        if (!candidates.some((candidate) => existsSync(candidate)))
+          problems.push({ file, line: index + 1, message: `${where} names ${path}, which does not exist` });
+      }
+    }
+  }
+  return problems;
+}
+
 function findBudgetProblems(root: string, files: string[], budget: DocsBudget): DocProblem[] {
   const problems: DocProblem[] = [];
   for (const file of files) {
@@ -176,7 +226,11 @@ function trackedMarkdown(root: string): string[] {
 
 export function checkDocs(root: string, options: { files?: string[]; budget?: DocsBudget } = {}): DocProblem[] {
   const files = options.files ?? trackedMarkdown(root);
-  return [...findLinkProblems(root, files), ...findBudgetProblems(root, files, options.budget ?? DEFAULT_BUDGET)];
+  return [
+    ...findLinkProblems(root, files),
+    ...findCodePathProblems(root, files),
+    ...findBudgetProblems(root, files, options.budget ?? DEFAULT_BUDGET),
+  ];
 }
 
 function readBudgetFile(): Partial<DocsBudget> {
@@ -211,7 +265,7 @@ function main(): void {
     );
     process.exitCode = 1;
   } else {
-    console.log(`Checked links in ${files.length} Markdown files and the AGENTS.md budgets.`);
+    console.log(`Checked links, map and ADR paths in ${files.length} Markdown files, and the AGENTS.md budgets.`);
   }
 }
 

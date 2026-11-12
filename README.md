@@ -27,7 +27,7 @@ Plan: 47 files to create, 1 conflict (.github/workflows/ci.yml), 15 scripts, 4 d
 | `env` | dotenvx: encrypted `.env.dev` and `.env.production` committed, keys in one ignored `.env.keys`, a typed loader at the app boundary |
 | `supply-chain` | 3-day minimum release age, exact versions, an install-script allowlist, grouped Dependabot with a cooldown, gitleaks in CI |
 | `changelog` | One `changelog.d/` fragment per PR, a CI check with a `no-changelog` escape label, and a release command that folds them into `CHANGELOG.md` |
-| `agent-docs` | An `AGENTS.md` skeleton the skill fills from your repo, `CLAUDE.md` importing it, `.agents/skills` shared with Claude Code, and a check for broken doc links and oversized agent docs |
+| `agent-docs` | An `AGENTS.md` skeleton with a code map the skill fills from your repo, `CLAUDE.md` importing it, `.agents/skills` shared with Claude Code, an ADR template, and a check for broken doc links, stale map and ADR paths, and oversized agent docs |
 | `agent-loops` | `ship` and `babysit` skills that take a branch through local review, PR, AI review, CI and squash merge, plus a PR template |
 
 `agent-loops` pulls in `agent-docs` and `ai-review`; `hooks` pulls in `quality`. Supported: bun and pnpm projects on Node 22.18+.

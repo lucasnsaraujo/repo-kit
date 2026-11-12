@@ -76,6 +76,63 @@ describe("links", () => {
   });
 });
 
+describe("code paths in the AGENTS.md map and ADR Code lines", () => {
+  test("reports a backticked path in the Map section of an AGENTS.md that no longer exists", () => {
+    const root = project({
+      "AGENTS.md": [
+        "# Guide",
+        "",
+        "## Map",
+        "",
+        "- Billing: `src/billing/` starts at `chargeCard` in `src/billing/charge.ts`.",
+        "- Auth: `src/auth/session.ts:42` (`readSession()`), built with `node scripts/build.mts`.",
+        "",
+        "## Commands",
+        "",
+        "Run `src/gone.ts` is outside the map, so it is not checked.",
+      ].join("\n"),
+      "src/billing/index.ts": "",
+    });
+    expect(checkDocs(root, { files: ["AGENTS.md"], budget })).toEqual([
+      { file: "AGENTS.md", line: 5, message: "the map names src/billing/charge.ts, which does not exist" },
+      { file: "AGENTS.md", line: 6, message: "the map names src/auth/session.ts, which does not exist" },
+    ]);
+  });
+
+  test("accepts map paths that exist, from the repository root or the AGENTS.md folder, and skips globs and packages", () => {
+    const root = project({
+      "packages/api/AGENTS.md":
+        "## Map\n\n- Routes: `src/routes.ts`, `packages/api/src/routes.ts`, `src/**/*.test.ts`, `@scope/pkg`, `db.query`, `package.json`\n",
+      "packages/api/src/routes.ts": "",
+      "packages/api/package.json": "{}",
+    });
+    expect(checkDocs(root, { files: ["packages/api/AGENTS.md"], budget })).toEqual([]);
+  });
+
+  test("ignores the fill placeholder of an unfilled map", () => {
+    const root = project({ "AGENTS.md": "## Map\n\n<!-- fill: e.g. `src/billing/charge.ts` -->\n" });
+    expect(checkDocs(root, { files: ["AGENTS.md"], budget })).toEqual([]);
+  });
+
+  test("reports a missing path on the Code line of an ADR, and only there", () => {
+    const root = project({
+      "docs/adr/0003-idempotent-charges.md": [
+        "# 0003: Idempotent charges",
+        "",
+        "- Status: Accepted",
+        "- Code: `src/billing/charge.ts` (`chargeCard`), `src/billing/ledger.ts`",
+        "",
+        "We once kept `src/old/payments.ts`, now removed.",
+      ].join("\n"),
+      "docs/adr/0000-template.md": "# 0000: Title\n\n- Code: <!-- backticked paths: `src/x.ts` (`run`) -->\n",
+      "src/billing/charge.ts": "",
+    });
+    expect(checkDocs(root, { files: ["docs/adr/0003-idempotent-charges.md", "docs/adr/0000-template.md"], budget })).toEqual([
+      { file: "docs/adr/0003-idempotent-charges.md", line: 4, message: "the Code line names src/billing/ledger.ts, which does not exist" },
+    ]);
+  });
+});
+
 describe("AGENTS.md budget", () => {
   test("allows the root file more lines than a nested one", () => {
     const root = project({ "AGENTS.md": lines(200), "src/api/AGENTS.md": lines(200) });
