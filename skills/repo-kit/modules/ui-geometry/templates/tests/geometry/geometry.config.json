@@ -1,0 +1,8 @@
+{
+  "command": "{%pmExec%} playwright test --project=geometry",
+  "routes": ["/"],
+  "widths": [320, 390, 1280],
+  "phoneMaxWidth": 480,
+  "viewportHeight": 800,
+  "ignore": []
+}

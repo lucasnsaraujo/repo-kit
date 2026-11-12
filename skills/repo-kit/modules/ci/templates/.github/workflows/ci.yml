@@ -24,6 +24,9 @@ jobs:
     outputs:
       check: ${{ steps.lanes.outputs.check }}
       test: ${{ steps.lanes.outputs.test }}
+{%if module:ui-geometry%}
+      geometry: ${{ steps.lanes.outputs.geometry }}
+{%endif%}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -46,6 +49,9 @@ jobs:
           declare -A LANES=(
             [check]='\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json|jsonc|css|grit)$'
             [test]='\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json)$'
+{%if module:ui-geometry%}
+            [geometry]='\.(tsx|jsx|css|scss|sass|less|html|svg)$|^tests/geometry/'
+{%endif%}
           )
           # ---- end lanes ----
 
@@ -138,6 +144,32 @@ jobs:
             echo "package.json has no test script; skipping it."
           fi
 {%endif%}
+{%if module:ui-geometry%}
+
+  # Opens the app's pages in Chromium at each width in tests/geometry/geometry.config.json and fails
+  # on a layout offender tests/geometry/baseline.json does not list. Playwright's webServer starts the app.
+  geometry:
+    name: Layout geometry
+    needs: changes
+    if: needs.changes.outputs.geometry == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: {%pmExec%} playwright install --with-deps chromium
+      - run: {%pmRun%} check:geometry
+      - name: Upload the measured pages
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: geometry
+          path: .artifacts/geometry
+          if-no-files-found: ignore
+          retention-days: 7
+{%endif%}
 {%if module:agent-docs%}
 
   # Runs on every change: the docs check also follows links to code files, so renaming a
@@ -199,6 +231,9 @@ jobs:
       - changes
       - check
       - test
+{%if module:ui-geometry%}
+      - geometry
+{%endif%}
 {%if module:agent-docs%}
       - docs
 {%endif%}

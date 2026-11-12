@@ -44,6 +44,9 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # The ui-geometry rule tests lay out fixture pages in a real browser.
+      - run: bunx playwright install --with-deps --only-shell chromium
+
       - name: Configure git for test repositories
         run: |
           git config --global user.name "repo-kit CI"

@@ -18,10 +18,12 @@ function actionlint(project: string): { status: number | null; output: string } 
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
 
-/** Renders ci.yml with every optional module turned on, so the docs and secrets jobs exist. */
-function renderFullWorkflow(lockfile: Lockfile): string {
+const FULL = ["ci", "quality", "tests", "agent-docs", "supply-chain"];
+
+/** Renders ci.yml with the given modules turned on; by default the ones that add the docs and secrets jobs. */
+function renderFullWorkflow(lockfile: Lockfile, modules = FULL): string {
   const project = applyModules({ lockfile, modules: ["ci"] });
-  const vars = buildVars(detect(project), ["ci", "quality", "tests", "agent-docs", "supply-chain"]);
+  const vars = buildVars(detect(project), modules);
   const source = readFileSync(join(REPO_ROOT, "skills/repo-kit/modules/ci/templates/.github/workflows/ci.yml"), "utf8");
   writeFileSync(join(project, ".github/workflows/ci.yml"), renderTemplate(source, vars));
   return project;
@@ -47,6 +49,7 @@ describe("rendered workflows", () => {
 
     test(`pass actionlint for ${lockfile} with every optional job rendered`, () => {
       expect(actionlint(renderFullWorkflow(lockfile))).toEqual({ status: 0, output: "" });
+      expect(actionlint(renderFullWorkflow(lockfile, [...FULL, "ui-geometry"]))).toEqual({ status: 0, output: "" });
     });
   }
 
@@ -104,12 +107,10 @@ describe("All checks pass", () => {
   });
 });
 
-describe("lane picking", () => {
-  const project = renderFullWorkflow("bun.lock");
+/** Commits `changed` on top of a base commit and runs the lane script of `project` as a pull request would. */
+function lanePicker(project: string) {
   const script = workflowStep(project, "changes", (step) => step.id === "lanes");
-
-  /** Commits `changed` on top of a base commit and runs the lane script as a pull request would. */
-  function pickLanes(changed: Record<string, string>, event = "pull_request"): Record<string, string> {
+  return (changed: Record<string, string>, event = "pull_request"): Record<string, string> => {
     const repo = tempDir("repo-kit-lanes-");
     const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo });
     git("init", "-q");
@@ -133,7 +134,11 @@ describe("lane picking", () => {
         .split("\n")
         .map((line) => line.split("=")),
     );
-  }
+  };
+}
+
+describe("lane picking", () => {
+  const pickLanes = lanePicker(renderFullWorkflow("bun.lock"));
 
   test("a markdown-only change skips the code lanes", () => {
     expect(pickLanes({ "README.md": "edited\n", "docs/guide.mdx": "x\n" })).toEqual({ check: "false", test: "false" });
@@ -156,5 +161,30 @@ describe("lane picking", () => {
 
   test("a push runs every lane whatever changed", () => {
     expect(pickLanes({ "README.md": "edited\n" }, "push")).toEqual({ check: "true", test: "true" });
+  });
+});
+
+describe("the layout geometry lane", () => {
+  const project = renderFullWorkflow("pnpm-lock.yaml", [...FULL, "ui-geometry"]);
+  const pickLanes = lanePicker(project);
+  const workflowText = readFileSync(join(project, ".github/workflows/ci.yml"), "utf8");
+  const geometrySteps = readWorkflow(project)
+    .jobs.geometry?.steps.map((step) => step.run)
+    .filter(Boolean);
+
+  test("runs for component, style and geometry config changes, and the required job waits for it", () => {
+    expect(pickLanes({ "src/Button.tsx": "export {};\n" }).geometry).toBe("true");
+    expect(pickLanes({ "src/app.css": "a{}\n" }).geometry).toBe("true");
+    expect(pickLanes({ "tests/geometry/baseline.json": "{}\n" }).geometry).toBe("true");
+    expect(workflowText).toMatch(/needs:\n(\s+- \S+\n)*\s+- geometry\n/);
+  });
+
+  test("skips a change to server code or docs", () => {
+    expect(pickLanes({ "src/app.ts": "export const a = 1;\n" }).geometry).toBe("false");
+    expect(pickLanes({ "README.md": "edited\n" }).geometry).toBe("false");
+  });
+
+  test("installs Chromium and runs check:geometry", () => {
+    expect(geometrySteps).toEqual(["pnpm exec playwright install --with-deps chromium", "pnpm run check:geometry"]);
   });
 });
