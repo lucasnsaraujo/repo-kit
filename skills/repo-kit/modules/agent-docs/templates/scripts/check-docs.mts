@@ -157,13 +157,14 @@ function findLinkProblems(root: string, files: string[]): DocProblem[] {
 
 /**
  * Backticked tokens that read as repository paths: a slash, or a file extension, so `db.query` and
- * `chargeCard` stay names. Globs, calls, package names, flags and URLs are skipped; `:line` is dropped.
+ * `chargeCard` stay names. Globs, calls, package names, flags, URLs and routes such as `/api/x` are
+ * skipped; `:line` is dropped.
  */
 function codePaths(line: string): string[] {
   return [...line.matchAll(/`([^`\s]+)`/g)]
     .map((match) => (match[1] ?? "").replace(/:\d+(?::\d+)?$/, ""))
     .filter((token) => token.includes("/") || FILE_EXTENSION.test(token))
-    .filter((token) => !/[*?(){}<>]|^[@-]/.test(token) && !URL_SCHEME.test(token));
+    .filter((token) => !/[*?(){}<>]|^[@/-]/.test(token) && !URL_SCHEME.test(token));
 }
 
 /** Lines of the `## Map` section, up to the next heading of level 1 or 2. */
@@ -193,8 +194,12 @@ function findCodePathProblems(root: string, files: string[]): DocProblem[] {
     const where = isAgents ? "the map" : "the Code line";
     for (const { line, index } of checked) {
       for (const path of codePaths(line)) {
-        const candidates = [join(root, dirname(file), path), join(root, path)];
-        if (!candidates.some((candidate) => existsSync(candidate)))
+        const bases = [join(root, dirname(file)), root];
+        // A slash token without an extension is a path only when its first folder exists here;
+        // otherwise it is a module name or a MIME type, such as `next/navigation`.
+        const firstFolder = path.split("/")[0] ?? "";
+        if (!FILE_EXTENSION.test(path) && !bases.some((base) => existsSync(join(base, firstFolder)))) continue;
+        if (!bases.some((base) => existsSync(join(base, path))))
           problems.push({ file, line: index + 1, message: `${where} names ${path}, which does not exist` });
       }
     }

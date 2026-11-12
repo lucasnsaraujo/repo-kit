@@ -102,7 +102,7 @@ describe("code paths in the AGENTS.md map and ADR Code lines", () => {
   test("accepts map paths that exist, from the repository root or the AGENTS.md folder, and skips globs and packages", () => {
     const root = project({
       "packages/api/AGENTS.md":
-        "## Map\n\n- Routes: `src/routes.ts`, `packages/api/src/routes.ts`, `src/**/*.test.ts`, `@scope/pkg`, `db.query`, `package.json`\n",
+        "## Map\n\n- Routes: `src/routes.ts`, `packages/api/src/routes.ts`, `src/**/*.test.ts`, `@scope/pkg`, `db.query`, `next/navigation`, `application/json`, `/api/stripe/webhook`, `package.json`\n",
       "packages/api/src/routes.ts": "",
       "packages/api/package.json": "{}",
     });
