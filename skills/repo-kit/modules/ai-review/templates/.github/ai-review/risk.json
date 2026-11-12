@@ -1,0 +1,39 @@
+{
+  "categories": {
+    "auth": [
+      "**/*auth*",
+      "**/*auth*/**",
+      "**/*session*",
+      "**/*session*/**",
+      "**/middleware*",
+      "**/*permission*",
+      "**/*permission*/**",
+      "**/*rbac*"
+    ],
+    "payments": [
+      "**/*billing*",
+      "**/*billing*/**",
+      "**/*payment*",
+      "**/*payment*/**",
+      "**/*stripe*",
+      "**/*stripe*/**",
+      "**/*checkout*",
+      "**/*checkout*/**",
+      "**/*invoice*",
+      "**/*subscription*",
+      "**/*webhook*",
+      "**/*webhook*/**"
+    ],
+    "migrations": [
+      "**/migrations/**",
+      "**/*migration*",
+      "**/*.sql",
+      "**/schema.prisma",
+      "**/drizzle/**",
+      "**/db/schema*",
+      "supabase/**"
+    ],
+    "secrets": ["**/.env*", "**/env.ts", "**/env.mjs", "**/*secret*", "**/*credential*", "**/*.pem", "**/*.key"],
+    "ci": [".github/**", "**/Dockerfile*", "**/docker-compose*", "**/*.tf", "vercel.json", "netlify.toml", "fly.toml"]
+  }
+}
