@@ -64,6 +64,7 @@ function main(): void {
   const baseline = parseBaseline(JSON.parse(readFileSync(baselinePath, "utf8")));
 
   if (run.status !== 0) {
+    if (!values.update) for (const line of compareWithBaseline(baseline, results).added) console.error(`new: ${line}`);
     const kept = values.update ? "; the baseline was not changed" : "";
     console.error(`check:geometry: Playwright exited with ${run.status ?? run.signal}${kept}.`);
     process.exitCode = run.status ?? 1;

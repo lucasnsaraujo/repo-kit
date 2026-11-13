@@ -100,6 +100,13 @@ describe("check:geometry", () => {
     expect(result.stderr).toContain('new: / @390 small-target button "Menu": 30x30px, under 44x44px');
   });
 
+  test("names the new offender when the Playwright check itself fails on it", () => {
+    const root = project([{ route: "/", width: 390, offenders: [small('button "Menu"')] }], 1);
+    const result = run(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('new: / @390 small-target button "Menu": 30x30px, under 44x44px');
+  });
+
   test("passes when every offender is in the baseline", () => {
     const root = project([{ route: "/", width: 390, offenders: [small('button "Menu"')] }], 0, [entry("/", 390, 'button "Menu"')]);
     const result = run(root);
