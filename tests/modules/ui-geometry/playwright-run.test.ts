@@ -42,3 +42,35 @@ test("check:geometry drives the real Playwright test file against a served page"
   expect(accepted.stdout).toContain("measured 2 pages; no new layout offenders");
   expect(accepted.status).toBe(0);
 }, 120_000);
+
+test("check:geometry fails a route that redirects away or throws, instead of measuring what it landed on", () => {
+  const project = applyModules({ lockfile: "bun.lock", modules: ["ui-geometry"], linkNodeModules: true });
+  const port = 20_000 + Math.floor(Math.random() * 20_000);
+  const page = (body: string) =>
+    `<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body>${body}</body></html>`;
+  writeFiles(project, {
+    "site/login.html": page("<main><h1>Sign in</h1></main>"),
+    "site/app.html": page('<script>location.replace("/login.html")</script>'),
+    "site/broken.html": page('<script>throw new Error("render failed")</script>'),
+    "playwright.config.ts": [
+      'import { defineConfig } from "@playwright/test";',
+      "export default defineConfig({",
+      `  webServer: { command: "python3 -m http.server ${port} --bind 127.0.0.1 --directory site", url: "http://127.0.0.1:${port}/login.html" },`,
+      `  use: { baseURL: "http://127.0.0.1:${port}" },`,
+      '  projects: [{ name: "geometry", testDir: "./tests/geometry", testMatch: "geometry.check.ts" }],',
+      "});",
+    ].join("\n"),
+    "tests/geometry/geometry.config.json": JSON.stringify({
+      command: "./node_modules/.bin/playwright test --project=geometry --reporter=line",
+      routes: ["/app.html", "/broken.html"],
+      widths: [1280],
+    }),
+  });
+
+  const result = spawnSync("node", ["scripts/check-geometry.mts", "--update"], { cwd: project, encoding: "utf8" });
+  const output = `${result.stdout}${result.stderr}`;
+  expect(output).toContain("/app.html ended on /login.html");
+  expect(output).toContain("render failed");
+  expect(result.status).toBe(1);
+  expect(JSON.parse(readFileSync(join(project, "tests/geometry/baseline.json"), "utf8"))).toEqual({ offenders: [] });
+}, 120_000);

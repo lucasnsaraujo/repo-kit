@@ -84,7 +84,10 @@ describe("check:geometry", () => {
     writeFileSync(join(root, "stub.cjs"), stub);
     const configPath = join(root, "tests/geometry/geometry.config.json");
     const config = JSON.parse(readFileSync(configPath, "utf8"));
-    writeFileSync(configPath, JSON.stringify({ ...config, command: "node stub.cjs" }));
+    const routes = [...new Set(results.map((result) => result.route))];
+    const widths = [...new Set(results.map((result) => result.width))];
+    const measured = results.length > 0 ? { routes, widths } : {};
+    writeFileSync(configPath, JSON.stringify({ ...config, ...measured, command: "node stub.cjs" }));
     writeFileSync(join(root, "tests/geometry/baseline.json"), JSON.stringify({ offenders: baseline }));
     return root;
   }
@@ -105,6 +108,16 @@ describe("check:geometry", () => {
     const result = run(root);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('new: / @390 small-target button "Menu": 30x30px, under 44x44px');
+  });
+
+  test("fails when Playwright passes without measuring every route at every width", () => {
+    const root = project([{ route: "/", width: 390, offenders: [] }]);
+    const configPath = join(root, "tests/geometry/geometry.config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    writeFileSync(configPath, JSON.stringify({ ...config, routes: ["/", "/settings"] }));
+    const result = run(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("measured 1 of 2 pages; missing: /settings @390");
   });
 
   test("passes when every offender is in the baseline", () => {

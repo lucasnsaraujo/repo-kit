@@ -78,6 +78,20 @@ function main(): void {
     return;
   }
 
+  // A filtered run (extra Playwright arguments) measures a subset on purpose.
+  if (positionals.length === 0) {
+    const measured = new Set(results.map((result) => `${result.route} @${result.width}`));
+    const missing = config.routes.flatMap((route) =>
+      config.widths.map((width) => `${route.path} @${width}`).filter((page) => !measured.has(page)),
+    );
+    if (missing.length > 0) {
+      const expected = config.routes.length * config.widths.length;
+      console.error(`check:geometry: measured ${measured.size} of ${expected} pages; missing: ${missing.join(", ")}`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   if (values.update) {
     const updated = updateBaseline(baseline, results);
     writeFileSync(baselinePath, formatBaseline(updated));

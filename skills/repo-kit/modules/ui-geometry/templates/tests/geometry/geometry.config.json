@@ -1,5 +1,5 @@
 {
-  "command": "{%pmExec%} playwright test --project=geometry",
+  "command": "{%pmExec%} playwright test --project=geometry --retries=0",
   "routes": ["/"],
   "widths": [320, 390, 1280],
   "phoneMaxWidth": 480,
