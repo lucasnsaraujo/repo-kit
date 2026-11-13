@@ -34,6 +34,10 @@ if (configPath === undefined) {
 
       for (const route of config.routes) {
         test(route.path, async ({ page }) => {
+          const pageErrors: string[] = [];
+          page.on("pageerror", (error) => {
+            if (!config.knownPageErrors.some((known) => error.message.includes(known))) pageErrors.push(error.message);
+          });
           await page.emulateMedia({ reducedMotion: "reduce" });
           const response = await page.goto(route.path, { waitUntil: "load" });
           expect(response?.status() ?? 200, `${route.path} answered with an error`).toBeLessThan(400);
@@ -41,6 +45,11 @@ if (configPath === undefined) {
           await page.evaluate(async () => {
             await document.fonts.ready;
           });
+          // A redirect (to a login page, say) or a crashed render would be measured as this route and pass.
+          const landed = new URL(page.url()).pathname;
+          const asked = new URL(route.path, page.url()).pathname;
+          expect(landed, `${route.path} ended on ${landed}`).toBe(asked);
+          expect(pageErrors, `${route.path} threw while rendering`).toEqual([]);
 
           const snapshot = await page.evaluate(measurePage, {
             ignore: config.ignore,

@@ -287,6 +287,7 @@ export type GeometryConfig = {
   phoneMaxWidth: number;
   viewportHeight: number;
   ignore: string[];
+  knownPageErrors: string[];
 };
 
 export type BaselineEntry = { route: string; width: number; rule: RuleName; element: string };
@@ -308,7 +309,7 @@ const isPositive = (value: unknown): value is number =>
 
 export function parseGeometryConfig(raw: unknown): GeometryConfig {
   if (!isRecord(raw)) fail("geometry.config.json must be a JSON object");
-  const { command, routes, widths, phoneMaxWidth = 480, viewportHeight = 800, ignore = [] } = raw;
+  const { command, routes, widths, phoneMaxWidth = 480, viewportHeight = 800, ignore = [], knownPageErrors = [] } = raw;
   if (typeof command !== "string" || command === "") fail("command must be the Playwright command line");
   if (!Array.isArray(routes) || routes.length === 0) fail("routes must list at least one route");
   if (!Array.isArray(widths) || widths.length === 0 || !widths.every(isPositive))
@@ -317,6 +318,8 @@ export function parseGeometryConfig(raw: unknown): GeometryConfig {
     fail("phoneMaxWidth and viewportHeight must be whole pixels");
   if (!Array.isArray(ignore) || !ignore.every((selector) => typeof selector === "string"))
     fail("ignore must list CSS selectors");
+  if (!Array.isArray(knownPageErrors) || !knownPageErrors.every((text) => typeof text === "string" && text !== ""))
+    fail("knownPageErrors must list parts of error messages");
   return {
     command,
     routes: routes.map((route, index): GeometryRoute => {
@@ -332,6 +335,7 @@ export function parseGeometryConfig(raw: unknown): GeometryConfig {
     phoneMaxWidth,
     viewportHeight,
     ignore,
+    knownPageErrors,
   };
 }
 
