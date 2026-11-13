@@ -1,0 +1,6 @@
+{
+  "id": "opencodereview",
+  "summary": "OpenCodeReview, self-hosted on the owner's server, reviews every pull request with evidence-checked findings; this module adds the REVIEW.md it reads. Alternative to ai-review.",
+  "conflicts": ["ai-review"],
+  "files": [{ "path": "REVIEW.md" }]
+}

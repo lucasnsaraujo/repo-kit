@@ -16,6 +16,7 @@ modules/<id>/
   "id": "ci",
   "summary": "One line shown in the module menu.",
   "requires": ["other-module"],
+  "conflicts": ["alternative-module"],
   "files": [
     { "path": ".github/workflows/ci.yml" },
     { "path": "bunfig.toml", "when": "bun" },
@@ -32,6 +33,7 @@ modules/<id>/
 | Field | Engine behaviour |
 |---|---|
 | `requires` | Selected automatically, applied first. `remove` refuses while a dependent is selected; after a remove, the other modules' untouched files are re-rendered without it. |
+| `conflicts` | Alternatives to this module. A selection holding both fails, including one that pulls the other in through `requires`. `--modules all` leaves a module with `conflicts` out unless the project already recorded it, and then leaves out every module that would pull in its alternative. |
 | `files` | Rendered and written. A file is overwritten only when the kit wrote it and nobody edited it since (hash match). Otherwise the new version lands in `<path>.repo-kit-new` for the agent to merge. `when` takes a template condition. |
 | `symlinks` | Created when the path is free. An existing different path is reported, never replaced. |
 | `packageScripts` | Added when the name is free. A different existing command is reported as `script-conflict`. Values are rendered. `remove` deletes the ones still holding the kit's command. |

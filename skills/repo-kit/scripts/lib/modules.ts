@@ -13,6 +13,8 @@ export type ModuleManifest = {
   id: string;
   summary: string;
   requires: string[];
+  /** Alternatives to this module: never selected together with it, and left out of `all`. */
+  conflicts: string[];
   files: ModuleFile[];
   symlinks: { path: string; target: string }[];
   packageScripts: Record<string, string>;
@@ -31,6 +33,7 @@ function readManifest(dir: string): LoadedModule {
     id: raw.id,
     summary: raw.summary,
     requires: raw.requires ?? [],
+    conflicts: raw.conflicts ?? [],
     files: raw.files ?? [],
     symlinks: raw.symlinks ?? [],
     packageScripts: raw.packageScripts ?? {},
@@ -52,10 +55,14 @@ export function loadModules(modulesDir: string): Map<string, LoadedModule> {
   return modules;
 }
 
-/** Expands the selection with every module it requires, in dependency order. */
+/**
+ * Expands the selection with every module it requires, in dependency order. `recorded` is the
+ * project's previous selection, used only to say which alternative to remove on a conflict.
+ */
 export function resolveSelection(
   requested: string[],
   modules: Map<string, LoadedModule>,
+  recorded: string[] = [],
 ): { ordered: string[]; addedFor: Record<string, string> } {
   const ordered: string[] = [];
   const addedFor: Record<string, string> = {};
@@ -74,5 +81,35 @@ export function resolveSelection(
   };
 
   for (const id of requested) visit(id, null);
+  for (const id of ordered) {
+    const clash = modules.get(id)?.conflicts.find((other) => ordered.includes(other));
+    if (!clash) continue;
+    const pulled = [id, clash].find((side) => addedFor[side]);
+    const via = pulled ? ` (${addedFor[pulled]} requires ${pulled})` : "";
+    const installed = [id, clash].find((side) => recorded.includes(side));
+    const hint = installed ? `This project records ${installed}; to switch, run \`kit.ts remove ${installed}\` first.` : "Pick one.";
+    throw new Error(`${id} and ${clash} cannot be selected together: they are alternatives${via}. ${hint}`);
+  }
   return { ordered, addedFor };
+}
+
+function closure(id: string, modules: Map<string, LoadedModule>, seen = new Set<string>()): Set<string> {
+  if (seen.has(id)) return seen;
+  seen.add(id);
+  for (const dependency of modules.get(id)?.requires ?? []) closure(dependency, modules, seen);
+  return seen;
+}
+
+/**
+ * What `--modules all` means: every module except opt-in alternatives (those declaring
+ * `conflicts`), plus the recorded ones, minus any module that would pull in an alternative
+ * the recorded selection rules out.
+ */
+export function selectAll(modules: Map<string, LoadedModule>, recorded: string[]): string[] {
+  const blocked = new Set(recorded.flatMap((id) => modules.get(id)?.conflicts ?? []));
+  for (const module of modules.values()) if (module.conflicts.some((other) => recorded.includes(other))) blocked.add(module.id);
+  return [...modules.values()]
+    .filter((module) => module.conflicts.length === 0 || recorded.includes(module.id))
+    .filter((module) => ![...closure(module.id, modules)].some((id) => blocked.has(id)))
+    .map((module) => module.id);
 }

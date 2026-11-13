@@ -25,7 +25,7 @@
 
 1. **Protect the default branch with the kit's required checks.** This is the one branch-protection step for the whole kit; other modules point here. Run it after the first pull request has reported each check, so GitHub knows the names. It reads the selected modules from `.repo-kit.json`:
    - always: `All checks pass` (this module's `ci-ok` job);
-   - with `ai-review`: `AI review` (the commit status `publish.ts` sets);
+   - with `ai-review`: `AI review` (the commit status `publish.ts` sets); `opencodereview` sets no status, so it adds nothing here;
    - with `changelog`: `Release notes` (the `notes` job in `changelog.yml`);
    - with `agent-loops`: admins follow the rules too (`ship` never merges with `--admin`) and review conversations must be resolved.
 
