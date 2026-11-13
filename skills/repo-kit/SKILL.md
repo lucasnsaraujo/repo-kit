@@ -1,6 +1,6 @@
 ---
 name: repo-kit
-description: Set up or update a TypeScript repo's dev workflow from selectable modules - CI, AI review (GitHub Actions or self-hosted OpenCodeReview), tests, hooks, env, supply chain, changelog, agent docs and loops.
+description: Set up or update a TypeScript repo's dev workflow from selectable modules - CI, AI review (GitHub Actions or self-hosted OpenCodeReview), tests, UI geometry, hooks, env, supply chain, changelog, agent docs and loops.
 disable-model-invocation: true
 ---
 
@@ -24,7 +24,7 @@ When `lock` exists, this is an update: keep the recorded modules and ask only ab
 
 Otherwise show the owner every module with one line each and a default, then ask once: all, or which. Defaults:
 
-- All modules are recommended. Mark a module as "replace" when the repo already has an equivalent (ESLint or Prettier → `quality` replaces them with Biome; Husky or Lefthook → `hooks`; Jest → `tests`; Renovate → `supply-chain` keeps Renovate and skips Dependabot; `.changeset/` → skip `changelog`).
+- All modules are recommended, except `ui-geometry` for a repo with no web UI. Mark a module as "replace" when the repo already has an equivalent (ESLint or Prettier → `quality` replaces them with Biome; Husky or Lefthook → `hooks`; Jest → `tests`; Renovate → `supply-chain` keeps Renovate and skips Dependabot; `.changeset/` → skip `changelog`).
 - `agent-loops` pulls in `agent-docs` and `ai-review`; `hooks` pulls in `quality`.
 - AI review has two alternatives; ask the owner which. `ai-review` (the default) runs in GitHub Actions on the owner's Claude subscription. `opencodereview` is for an owner with a server that stays on: OpenCodeReview runs there in Docker, and the kit only adds its `REVIEW.md`. It leaves out `agent-loops`, whose `babysit` skill reads `ai-review`'s comment. To switch a configured project, `KIT remove` the other one first.
 

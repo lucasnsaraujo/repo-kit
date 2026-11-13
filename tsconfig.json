@@ -13,5 +13,6 @@
     "skipLibCheck": true,
     "types": ["node", "bun"]
   },
-  "include": ["skills/repo-kit/scripts/**/*.ts", "skills/repo-kit/modules/*/templates/**/*.ts", "tests/**/*.ts"]
+  "include": ["skills/repo-kit/scripts/**/*.ts", "skills/repo-kit/modules/*/templates/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["skills/repo-kit/modules/ui-geometry/templates/tests/geometry/geometry.check.ts"]
 }

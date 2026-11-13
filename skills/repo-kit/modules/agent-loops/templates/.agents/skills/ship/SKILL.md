@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Ship the current branch to {%defaultBranch%}. Review the diff locally, open the pull request, babysit the AI review and CI until green, then squash-merge. Use when a change is finished and the developer asks to ship it, merge it, or get it to {%defaultBranch%}.
+description: Ship the current branch to {%defaultBranch%}. Review the diff locally, open the pull request, babysit the AI review when the change is high risk and CI until green, then squash-merge. Use when a change is finished and the developer asks to ship it, merge it, or get it to {%defaultBranch%}.
 ---
 
 # Ship
@@ -57,9 +57,18 @@ Gates 3 to 5 wait on GitHub. `{%defaultBranch%}` can move during the wait. GitHu
 
 ## Gate 3: babysit the AI review
 
-Run the `babysit` skill on the pull request. It owns triage, fixes, rebuttals, and re-review requests. Apply "While you wait" during each of its waits.
+The review workflow rates each push by the files the pull request changes (`.github/ai-review/risk.json`: auth, payments, migrations, secrets, CI, dependencies) and by any P0 or P1 the last review left open. Read the rating on the current head SHA once the `AI review` status appears:
 
-Done when `babysit` reports a clean review on the current head SHA, and the `AI review` status on that SHA is `success`.
+```sh
+gh api "repos/{owner}/{repo}/commits/<head-sha>/status" --jq '.statuses[] | select(.context == "AI review") | "\(.state) \(.description)"'
+```
+
+- `success low risk: review not required`: the pull request is **low risk**. No review runs; gate 3 is done.
+- Anything else: the pull request is **high risk**. Run the `babysit` skill on it. It owns triage, fixes, rebuttals, and re-review requests. Apply "While you wait" during each of its waits.
+
+Each push is rated again: a fix that touches a risky file turns a low-risk pull request high risk.
+
+Done when the `AI review` status on the current head SHA is `success`, and for a high-risk pull request `babysit` reports a clean review on that SHA.
 
 ## Gate 4: make CI green
 
@@ -86,13 +95,23 @@ Merge only when all of these hold on the same head SHA:
 - Every required check is `success`, and so is `AI review`.
 - No valid AI review finding is open, and no human thread waits for an answer.
 
-Then merge:
+Then merge by the rating from gate 3, read again on this head SHA:
 
-```sh
-gh pr merge <pr> --squash --match-head-commit <head-sha>
-```
+- **Low risk**: let GitHub merge as soon as its own requirements hold, so a late check or a queue does not need you to wait:
+
+  ```sh
+  gh pr merge <pr> --squash --auto --match-head-commit <head-sha>
+  ```
+
+- **High risk**: merge now, after the clean review:
+
+  ```sh
+  gh pr merge <pr> --squash --match-head-commit <head-sha>
+  ```
 
 `--match-head-commit` refuses the merge when a push landed after your last check. Branch protection applies to you as to anyone: `--admin` and `--no-verify` are off limits.
+
+With `--auto`, poll `gh pr view <pr> --json state,autoMergeRequest` every 2 minutes until the state changes; when GitHub turns auto-merge off (a new push, a failed check), go back to the gate that failed.
 
 Done when `gh pr view <pr> --json state,mergeCommit` shows `MERGED`, and after `git fetch origin {%defaultBranch%}`, `git branch -r --contains <merge-sha>` lists `origin/{%defaultBranch%}`.
 
@@ -112,7 +131,7 @@ Hand back to the developer when:
 | --- | --- | --- |
 | Local review | N fixed, M not valid | commit SHAs |
 | Pull request | opened | URL |
-| AI review | clean after N rounds | review comment link |
+| AI review | low risk, not reviewed / clean after N rounds | status or review comment link |
 | CI | required checks success | run link |
 | Merge | merged | merge commit SHA |
 

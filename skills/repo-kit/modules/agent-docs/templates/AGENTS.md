@@ -18,6 +18,10 @@
 ## Commands
 
 `package.json` scripts are the source of truth: read them before you run anything, and run them with `{%pmRun%} <script>`. In a fresh worktree, run `{%installFrozen%}` first.
+{%if module:ci%}
+
+`{%pmRun%} ci:local` runs every check CI runs, in CI's order, and stops at the first failure. Run it before you push a branch you expect to merge without another round.
+{%endif%}
 
 <!-- fill: only what package.json cannot tell: a command that needs a running service, a slow command and its cheap alternative, a required order. Delete this comment when there is nothing to add. -->
 
@@ -76,6 +80,12 @@ Write the notes for each change a user can see in a new `changelog.d/<branch>.md
 - Development runs without `.env.keys` on safe defaults. Production credentials never appear in `.env.dev`.
 - Read settings through the typed loader <!-- fill: path to the env loader -->. Keep secret values off the screen: no `dotenvx get`, no `echo`.
 {%endif%}
+
+## Map
+
+One line per area: the path, the function to start reading from, and the ADR that explains why it works this way. `{%pmRun%} check:docs` fails when a backticked path here no longer exists.
+
+<!-- fill: one line per area, e.g. - Billing: `src/billing/`, start at `chargeCard` in `src/billing/charge.ts`; ADR `docs/adr/0003-idempotent-charges.md`. List only areas whose entry point one search would not find. -->
 
 ## Where to look
 

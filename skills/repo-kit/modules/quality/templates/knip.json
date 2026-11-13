@@ -1,5 +1,9 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+{%if module:ui-geometry%}
+  "entry": [".github/ai-review/*.ts", "tests/geometry/geometry.check.ts"],
+{%else%}
   "entry": [".github/ai-review/*.ts"],
+{%endif%}
   "ignoreFiles": ["tools/biome/fixtures/**"]
 }

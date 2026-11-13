@@ -2,7 +2,7 @@
 
 ## Sets up
 
-- `.agents/skills/ship/SKILL.md`: five gates from a finished branch to the default branch: local review, pull request from the template, `babysit`, the required CI checks (`All checks pass` when the `ci` module is selected), then `gh pr merge --squash --match-head-commit <sha>`. Watches for merge conflicts, which stop GitHub from starting any `pull_request` workflow.
+- `.agents/skills/ship/SKILL.md`: five gates from a finished branch to the default branch: local review, pull request from the template, the AI review by risk tier, the required CI checks (`All checks pass` when the `ci` module is selected), then the merge. A pull request the review workflow rated low risk (`AI review` is `success` with `low risk: review not required`) skips `babysit` and merges with `gh pr merge --squash --auto --match-head-commit <sha>`; a high-risk one goes through `babysit` and merges with `gh pr merge --squash --match-head-commit <sha>` after a clean review. Watches for merge conflicts, which stop GitHub from starting any `pull_request` workflow.
 - `.agents/skills/babysit/SKILL.md`: the AI review loop: read the newest review, a fix-or-rebut ledger per finding, rebuttals that name the guard at `path:line`, the rebuttal posted before the push, `/ai-review` when there is nothing to push, and a stop when the same finding returns twice.
 - `.github/pull_request_template.md`: Linked issue, What changed, Verification, Failure modes (only when tests change), Risk and security impact, Screenshots, Approvability (lint and type escapes).
 - Requires `agent-docs` (the skills folder and `AGENTS.md` they point at) and `ai-review` (the review comment, the `/ai-review` rebuttal trigger, and the `AI review` status).
@@ -12,15 +12,15 @@
 1. **Merge an existing PR template.** When `.github/pull_request_template.md.repo-kit-new` exists, or the repo has `.github/PULL_REQUEST_TEMPLATE.md` or a `.github/PULL_REQUEST_TEMPLATE/` folder, keep one template: carry the project's own sections (type-of-change boxes, CLA, deploy notes) into the kit's structure. Delete the other file; GitHub reads only one. Done when `ls .github | grep -i pull_request` prints one name and no `*.repo-kit-new` from this module remains.
 2. **Match the required check name.** Read the branch protection or ruleset of the default branch (`gh api repos/{owner}/{repo}/rules/branches/<default>` or `gh api repos/{owner}/{repo}/branches/<default>/protection`). When the required check is not `All checks pass`, replace that name in `ship/SKILL.md`. Done when every check name in `ship/SKILL.md` is a check the default branch requires or the repo's workflows produce.
 3. **Match the review comment.** `babysit` reads what `.github/ai-review/publish.ts` renders: a `github-actions` comment starting `## AI review`, with `### Findings`, `### Withdrawn findings`, numbered finding lines such as `1. **[NEW][P1] Title** - path:line`, and a ``<sub>Commit `` footer. When the project changed `publish.ts`, update step 1 of `babysit/SKILL.md` to match. Done when the `jq` filter in step 1, run against a pull request with a finished review, prints that review.
-4. **Fit the repo's merge rules.** When the repo allows only merge commits or only rebase merges (`gh api repos/{owner}/{repo} --jq '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}'`), change `--squash` in gate 5 to the allowed method. Done when the flag in gate 5 is allowed by the repo.
+4. **Fit the repo's merge rules.** When the repo allows only merge commits or only rebase merges (`gh api repos/{owner}/{repo} --jq '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}'`), change `--squash` in gate 5 to the allowed method. Low-risk merges use `--auto`, which needs auto-merge allowed on the repository (an owner step). Done when the flags in gate 5 are allowed by the repo.
 5. **Adopt.** After any edit, run `node <kit>/scripts/kit.ts adopt <edited paths>` so later kit runs propose changes beside the file instead of replacing it. Done when `kit.ts check` lists none of this module's files as `edited`.
 
 ## Owner steps
 
-- Allow squash merges and delete branches after merge (`ship` relies on both):
+- Allow squash merges and auto-merge, and delete branches after merge (`ship` relies on all three):
 
   ```sh
-  gh repo edit --enable-squash-merge --delete-branch-on-merge
+  gh repo edit --enable-squash-merge --delete-branch-on-merge --enable-auto-merge
   ```
 
 - Branch protection, so `ship` cannot merge red code: one owner step sets it for the whole kit, in the `ci` module's `MODULE.md` ("Owner steps"). Without the `ci` module, require the repository's own checks and `AI review` on the default branch through its existing protection or ruleset.
@@ -30,6 +30,7 @@
 - `head -4 .agents/skills/ship/SKILL.md` and `head -4 .agents/skills/babysit/SKILL.md` show front matter with `name:` and a `description:` that starts with the action.
 - `ls .claude/skills/` lists `ship` and `babysit` (through the `agent-docs` symlink).
 - `grep -n -- "--admin\|--no-verify\|--force" .agents/skills/ship/SKILL.md` prints only lines that forbid them.
+- `grep -c "low risk: review not required" .agents/skills/ship/SKILL.md .github/workflows/ai-review.yml` prints at least `1` for each file: the skill reads the exact status description the `skip-low-risk` job writes.
 - `grep -c "^## " .github/pull_request_template.md` prints `7`.
 - On a test pull request, ask the agent to "babysit this PR": its first output is a ledger table with one row per finding of the newest review.
 

@@ -1,0 +1,14 @@
+{
+  "id": "ui-geometry",
+  "summary": "A Playwright layout check at phone and desktop widths that fails on new overflow, clipped text, small or overlapping targets, uneven control rows and elements outside the viewport.",
+  "files": [
+    { "path": "tests/geometry/geometry.ts" },
+    { "path": "tests/geometry/geometry.check.ts" },
+    { "path": "tests/geometry/geometry.config.json" },
+    { "path": "tests/geometry/baseline.json" },
+    { "path": "scripts/check-geometry.mts" }
+  ],
+  "packageScripts": { "check:geometry": "node scripts/check-geometry.mts" },
+  "lines": [{ "path": ".gitignore", "lines": [".artifacts/"] }],
+  "devDependencies": ["@playwright/test"]
+}

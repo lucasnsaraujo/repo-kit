@@ -215,7 +215,7 @@ export function execute(root: string, result: Plan): Lock {
     }
   }
 
-  if (pkg && pkgChanged) writeFileSync(join(root, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
+  if (pkg && pkgChanged) writePackageJson(root, pkg);
   for (const [path, lines] of linesByFile) {
     const full = join(root, path);
     const current = readText(full) ?? "";
@@ -224,6 +224,13 @@ export function execute(root: string, result: Plan): Lock {
   }
   writeLock(root, lock);
   return lock;
+}
+
+/** Rewrites package.json with the indent it already had, so a tabs repo stays tabs. */
+function writePackageJson(root: string, pkg: PackageJson): void {
+  const path = join(root, "package.json");
+  const indent = /^\{\r?\n([ \t]+)"/.exec(readText(path) ?? "")?.[1] ?? 2;
+  writeFileSync(path, `${JSON.stringify(pkg, null, indent)}\n`);
 }
 
 export type Drift = { path: string; state: "missing" | "edited" | "outdated" };
@@ -304,6 +311,6 @@ function dropUntouchedScripts(root: string, module: LoadedModule | undefined, va
     delete pkg.scripts[name];
     removed.push(name);
   }
-  if (removed.length > 0) writeFileSync(join(root, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
+  if (removed.length > 0) writePackageJson(root, pkg);
   return removed;
 }

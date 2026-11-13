@@ -1,5 +1,6 @@
 {
   "id": "ci",
-  "summary": "GitHub Actions CI: lanes picked from the diff, lint, types, tests, and one required \"All checks pass\" job.",
-  "files": [{ "path": ".github/workflows/ci.yml" }, { "path": ".github/actions/setup/action.yml" }]
+  "summary": "GitHub Actions CI: lanes picked from the diff, lint, types, tests, one required \"All checks pass\" job, and ci:local to run the same checks before a push.",
+  "files": [{ "path": ".github/workflows/ci.yml" }, { "path": ".github/actions/setup/action.yml" }, { "path": "scripts/ci-local.mts" }],
+  "packageScripts": { "ci:local": "node scripts/ci-local.mts {%pm%}" }
 }

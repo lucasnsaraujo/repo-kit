@@ -14,6 +14,8 @@
     { "path": ".github/ai-review/github.ts" },
     { "path": ".github/ai-review/collect.ts" },
     { "path": ".github/ai-review/compose-prompt.ts" },
-    { "path": ".github/ai-review/publish.ts" }
+    { "path": ".github/ai-review/publish.ts" },
+    { "path": ".github/ai-review/risk.ts" },
+    { "path": ".github/ai-review/risk.json" }
   ]
 }

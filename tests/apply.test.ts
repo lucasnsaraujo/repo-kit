@@ -87,6 +87,13 @@ describe("plan and execute", () => {
     ]);
   });
 
+  test("keeps the indentation package.json already had", () => {
+    const { project, run } = setup();
+    write(project, "package.json", `${JSON.stringify({ name: "demo", private: true }, null, "\t")}\n`);
+    run(["ci"]);
+    expect(read(project, "package.json")).toStartWith('{\n\t"name": "demo"');
+  });
+
   test("adds missing scripts, fields and lines but reports a script that already differs", () => {
     const { project, run } = setup();
     const result = run(["ci"]);
