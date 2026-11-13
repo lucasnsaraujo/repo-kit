@@ -62,6 +62,7 @@ describe("the geometry config", () => {
       phoneMaxWidth: 480,
       viewportHeight: 800,
       ignore: [],
+      knownPageErrors: [],
     });
   });
 

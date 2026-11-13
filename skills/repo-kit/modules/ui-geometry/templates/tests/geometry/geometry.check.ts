@@ -35,7 +35,9 @@ if (configPath === undefined) {
       for (const route of config.routes) {
         test(route.path, async ({ page }) => {
           const pageErrors: string[] = [];
-          page.on("pageerror", (error) => pageErrors.push(error.message));
+          page.on("pageerror", (error) => {
+            if (!config.knownPageErrors.some((known) => error.message.includes(known))) pageErrors.push(error.message);
+          });
           await page.emulateMedia({ reducedMotion: "reduce" });
           const response = await page.goto(route.path, { waitUntil: "load" });
           expect(response?.status() ?? 200, `${route.path} answered with an error`).toBeLessThan(400);
